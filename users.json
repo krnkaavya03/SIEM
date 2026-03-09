@@ -1,0 +1,40 @@
+{
+    "Kaavya": {
+        "password": "d9d6b470956e3e5e357ec71b9eb13da4dc646ce95bf47ba8d2d000bd372d7c60",
+        "role": "Admin",
+        "failed_attempts": 0,
+        "locked_until": 0,
+        "last_login": "2026-02-17T11:25:46.005732"
+    },
+    "Kaavs": {
+        "password": "24d37373334cc4e81e86f5739f0e20d2ed65644492a3d4e32949ab587ce67a91",
+        "role": "Analyst",
+        "failed_attempts": 0,
+        "locked_until": 0,
+        "last_login": "2026-02-17T02:38:27.782464"
+    },
+    "KaavyaK": {
+        "password": "a4c0933d1b486cb2338cb6d42d643fe066be7ceef6bfed885685bc1908afacd6",
+        "role": "Analyst",
+        "failed_attempts": 0,
+        "locked_until": 0
+    },
+    "Kaavyaa": {
+        "password": "feede40783d18efc665bee1147090beb4cc008a207e0f19646941450e3801088",
+        "role": "Admin",
+        "email": "krnkaavya03@gmail.com",
+        "failed_attempts": 3,
+        "locked_until": 1771276147.701965,
+        "created_at": "2026-02-16T22:06:27.838185",
+        "last_login": "2026-02-16T22:06:31.877040"
+    },
+    "KaavyaKKK": {
+        "password": "95fee752ae7bef2e1245cd6413137c57858761f4dca79376ef80f396e92761f9",
+        "role": "Analyst",
+        "email": "kenkjavy@gmail.com",
+        "failed_attempts": 0,
+        "locked_until": 0,
+        "created_at": "2026-03-06T12:37:27.920505",
+        "last_login": "2026-03-06T12:37:33.437742"
+    }
+}
