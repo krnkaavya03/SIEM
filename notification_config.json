@@ -1,0 +1,10 @@
+[
+  {
+    "email_enabled": false,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "krnkaavya03@gmail.com",
+    "recipient": "krnkaavya03@gmail.com",
+    "smtp_password": "vkxcvkitfvjanmml"
+  }
+]

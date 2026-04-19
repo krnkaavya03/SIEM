@@ -1,1154 +1,1045 @@
-# app.py - Advanced SIEM Dashboard (FIXED VERSION)
+# app_advanced.py — SIEMSecure Pro v3.1
+
 import streamlit as st
 import pandas as pd
-import os
-import sys
-import paramiko
-import json
-import hashlib
-import re
-import time
+import os, sys, json, hashlib, re, time, io, csv
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import requests
 
-# Add SIEM project path
-sys.path.append(os.path.abspath("."))
 
-# Import SIEM Framework - FIXED
+# ------------------------
+# Initialize session_state
+# ------------------------
+if 'alerts_data' not in st.session_state:
+    st.session_state['alerts_data'] = []
+
+if 'analysis_mode' not in st.session_state:
+    st.session_state['analysis_mode'] = None
+
+if 'log_file' not in st.session_state:
+    st.session_state['log_file'] = None
+
+if 'dashboard_data' not in st.session_state:
+    st.session_state['dashboard_data'] = pd.DataFrame()
+
+# ── Load environment variables ─────────────────────────
+from dotenv import load_dotenv
+load_dotenv()
+
+# (Optional Debug - REMOVE after testing)
+# st.write("API KEY:", os.getenv("ABUSEIPDB_API_KEY"))
+
+# ── Path setup ─────────────────────────────────────────
+ROOT = os.path.abspath(os.path.dirname(__file__) if "__file__" in dir() else ".")
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+# ── SIEM Framework import ──────────────────────────────
+_SIEM_OK = False
 try:
-    from SIEM_Hybrid_Framework.main import SIEMFramework
+    from main import SIEMFramework
+    _SIEM_OK = True
 except ImportError:
     try:
-        from main import SIEMFramework
+        from SIEM_Hybrid_Framework.main import SIEMFramework
+        _SIEM_OK = True
     except ImportError:
-        st.error("⚠️ Could not import SIEMFramework. Make sure SIEM_Hybrid_Framework folder is in the same directory as this app.")
-        st.stop()
+        pass
 
-# -----------------------------
-# ADVANCED CONFIG
-# -----------------------------
+# ── Optional Modules (Safe Imports) ────────────────────
+_NOTIF_OK = _ENRICH_OK = _RISK_OK = _TOTP_OK = _SYSLOG_OK = _WINEVENT_OK = False
+
+try:
+    from core.notification_engine import NotificationEngine, load_smtp_config
+    _NOTIF_OK = True
+except Exception:
+    pass
+
+try:
+    # ✅ FIXED CLASS NAME HERE
+    from core.ip_enrichment import IPEnrichment
+    _ENRICH_OK = True
+except Exception:
+    pass
+
+try:
+    from core.risk_engine import RiskEngine
+    _RISK_OK = True
+except Exception:
+    pass
+
+try:
+    from core.totp_manager import TOTPManager
+    _TOTP_OK = True
+except Exception:
+    pass
+
+try:
+    from core.syslog_collector import SyslogCollector
+    _SYSLOG_OK = True
+except Exception:
+    pass
+
+try:
+    from core.windows_event_collector import WindowsEventCollector
+    _WINEVENT_OK = True
+except Exception:
+    pass
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ──────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="SIEMSecure", 
-    page_icon="🔐", 
+    page_title="SIEMSecure Pro",
+    page_icon="🔐",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-USER_DB = "users.json"
+# ──────────────────────────────────────────────────────────────────────────────
+# CONSTANTS
+# ──────────────────────────────────────────────────────────────────────────────
+USER_DB          = "users.json"
 ALERT_HISTORY_DB = "alert_history.json"
-NOTIFICATION_CONFIG = "notification_config.json"
-AUDIT_LOG = "audit_log.json"
-MAX_ATTEMPTS = 3
-LOCK_TIME = 60
+NOTIFICATION_CFG = "notification_config.json"
+AUDIT_LOG_FILE   = "audit_log.json"
+MAX_ATTEMPTS     = int(os.getenv("MAX_LOGIN_ATTEMPTS", 3))
+LOCK_TIME        = int(os.getenv("LOCK_TIME_SECONDS", 60))
 
-# Severity color mapping
 SEVERITY_COLORS = {
-    "CRITICAL": "#FF0000",
-    "HIGH": "#FF6B00",
-    "MEDIUM": "#FFA500",
-    "LOW": "#00FF00"
+    "CRITICAL": "#e74c3c",
+    "HIGH":     "#e67e22",
+    "MEDIUM":   "#f1c40f",
+    "LOW":      "#2ecc71",
 }
 
-# -----------------------------
-# CUSTOM CSS - ADVANCED THEMES
-# -----------------------------
-def apply_advanced_theme(theme):
-    """Apply advanced glassmorphism and modern UI themes"""
-    
-    if theme == "Dark Pro":
-        bg = "linear-gradient(135deg, #0F2027 0%, #203A43 50%, #2C5364 100%)"
-        sidebar = "#1a1a2e"
-        text = "#FFFFFF"
-        card = "rgba(31, 41, 55, 0.8)"
-        accent = "#00D9FF"
-    elif theme == "Cyber Blue":
-        bg = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-        sidebar = "#1e1e3f"
-        text = "#FFFFFF"
-        card = "rgba(30, 30, 63, 0.8)"
-        accent = "#00FFFF"
-    elif theme == "Matrix":
-        bg = "linear-gradient(135deg, #000000 0%, #0a0e27 100%)"
-        sidebar = "#0a0a0a"
-        text = "#00FF41"
-        card = "rgba(10, 10, 10, 0.9)"
-        accent = "#00FF41"
-    elif theme == "Sunset":
-        bg = "linear-gradient(135deg, #FF512F 0%, #DD2476 50%, #F46B45 100%)"
-        sidebar = "#2d132c"
-        text = "#FFFFFF"
-        card = "rgba(45, 19, 44, 0.8)"
-        accent = "#FFD700"
-    else:  # Light Pro
-        bg = "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)"
-        sidebar = "#ffffff"
-        text = "#2d3748"
-        card = "rgba(255, 255, 255, 0.9)"
-        accent = "#4299e1"
-
-    st.markdown(
-        f"""
-        <style>
-        /* Main background with gradient */
-        .stApp {{
-            background: {bg};
-            color: {text};
-        }}
-
-        /* Glassmorphism sidebar */
-        section[data-testid="stSidebar"] {{
-            background: {card};
-            backdrop-filter: blur(10px);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
-        }}
-
-        /* Modern cards with glassmorphism */
-        div[data-testid="metric-container"] {{
-            background: {card};
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-            transition: transform 0.3s ease;
-        }}
-
-        div[data-testid="metric-container"]:hover {{
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.5);
-        }}
-
-        /* Animated buttons */
-        .stButton > button {{
-            background: linear-gradient(45deg, {accent}, {accent}AA);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            padding: 10px 30px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px 0 rgba(0, 0, 0, 0.2);
-        }}
-
-        .stButton > button:hover {{
-            transform: scale(1.05);
-            box-shadow: 0 6px 20px 0 rgba(0, 0, 0, 0.3);
-        }}
-
-        /* Input fields */
-        input, textarea, select {{
-            background: rgba(255, 255, 255, 0.1) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            border-radius: 10px !important;
-            color: {text} !important;
-        }}
-
-        /* Headers with gradient text */
-        h1, h2, h3 {{
-            background: linear-gradient(45deg, {accent}, {accent}AA);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-weight: bold;
-        }}
-
-        /* DataFrames */
-        .stDataFrame {{
-            background: {card};
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 10px;
-        }}
-
-        /* Tabs */
-        .stTabs [data-baseweb="tab-list"] {{
-            gap: 10px;
-        }}
-
-        .stTabs [data-baseweb="tab"] {{
-            background: {card};
-            border-radius: 10px;
-            padding: 10px 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }}
-
-        /* Progress bars */
-        .stProgress > div > div > div > div {{
-            background: linear-gradient(45deg, {accent}, {accent}AA);
-        }}
-
-        /* Animated loading */
-        @keyframes pulse {{
-            0%, 100% {{ opacity: 1; }}
-            50% {{ opacity: 0.5; }}
-        }}
-
-        .stSpinner > div {{
-            border-color: {accent} !important;
-            animation: pulse 1.5s ease-in-out infinite;
-        }}
-
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+# ──────────────────────────────────────────────────────────────────────────────
+# THEME
+# ──────────────────────────────────────────────────────────────────────────────
+def apply_theme(theme):
+    p = {
+        "Dark Pro":   dict(grad="linear-gradient(135deg,#0F2027,#203A43,#2C5364)", card="rgba(31,41,55,0.85)", accent="#00D9FF"),
+        "Cyber Blue": dict(grad="linear-gradient(135deg,#667eea,#764ba2)",         card="rgba(30,30,63,0.85)",  accent="#00FFFF"),
+        "Matrix":     dict(grad="linear-gradient(135deg,#000000,#0a0e27)",          card="rgba(10,10,10,0.9)",   accent="#00FF41"),
+        "Light Pro":  dict(grad="linear-gradient(135deg,#f5f7fa,#c3cfe2)",          card="rgba(255,255,255,0.92)", accent="#4299e1"),
+    }.get(theme, {})
+    if not p:
+        return
+    st.markdown(f"""<style>
+    .stApp{{background:{p['grad']};}}
+    section[data-testid="stSidebar"]{{background:{p['card']};backdrop-filter:blur(10px);}}
+    div[data-testid="metric-container"]{{background:{p['card']};border-radius:15px;
+        padding:20px;border:1px solid rgba(255,255,255,0.1);
+        box-shadow:0 8px 32px rgba(31,38,135,0.37);transition:transform .3s;}}
+    div[data-testid="metric-container"]:hover{{transform:translateY(-4px);}}
+    .stButton>button{{background:linear-gradient(45deg,{p['accent']},{p['accent']}AA);
+        color:white;border:none;border-radius:25px;padding:10px 28px;font-weight:bold;
+        transition:all .3s;}}
+    .stButton>button:hover{{transform:scale(1.04);}}
+    </style>""", unsafe_allow_html=True)
 
 
-# -----------------------------
-# UTILITY FUNCTIONS
-# -----------------------------
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def load_users():
-    if not os.path.exists(USER_DB):
-        return {}
+# ──────────────────────────────────────────────────────────────────────────────
+# DB HELPERS
+# ──────────────────────────────────────────────────────────────────────────────
+def load_json(path, default=None):
+    if default is None:
+        default = []
+    if not os.path.exists(path):
+        return default
     try:
-        with open(USER_DB, "r") as f:
+        with open(path) as f:
             return json.load(f)
-    except:
-        return {}
+    except Exception:
+        return default
 
+def save_json(path, data):
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        st.error(f"Save failed: {e}")
 
-def save_users(users):
-    with open(USER_DB, "w") as f:
-        json.dump(users, f, indent=4)
+def load_users() -> dict:
+    d = load_json(USER_DB, {})
+    return d if isinstance(d, dict) else {}
 
+def save_users(u: dict):
+    save_json(USER_DB, u)
 
-def log_audit(username, action, details=""):
-    """Log user actions for audit trail"""
-    audit_data = load_json_db(AUDIT_LOG)
-    
-    audit_data.append({
-        "timestamp": datetime.now().isoformat(),
-        "username": username,
-        "action": action,
-        "details": details,
-        "ip_address": "127.0.0.1"
+def hash_pw(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def is_strong(pw: str) -> bool:
+    return (len(pw) >= 8
+            and re.search(r"[A-Z]", pw)
+            and re.search(r"[0-9]", pw)
+            and re.search(r'[!@#$%^&*(),.?":{}|<>]', pw))
+
+def log_audit(username: str, action: str, details: str = ""):
+    data = load_json(AUDIT_LOG_FILE, [])
+    if not isinstance(data, list):
+        data = []
+    data.append({
+        "timestamp":  datetime.now().isoformat(),
+        "username":   username,
+        "action":     action,
+        "details":    str(details),
+        "ip_address": "127.0.0.1",
     })
-    
-    save_json_db(AUDIT_LOG, audit_data)
+    save_json(AUDIT_LOG_FILE, data)
+
+def save_alert_history(new_alerts: list):
+    history = load_json(ALERT_HISTORY_DB, [])
+    if not isinstance(history, list):
+        history = []
+    existing = {a.get("alert_id") for a in history}
+    added = [a for a in new_alerts if a.get("alert_id") not in existing]
+    history.extend(added)
+    save_json(ALERT_HISTORY_DB, history)
+    return added
 
 
-def load_json_db(filepath):
-    """Generic JSON database loader"""
-    if not os.path.exists(filepath):
-        return []
-    try:
-        with open(filepath, "r") as f:
-            return json.load(f)
-    except:
-        return []
-
-
-def save_json_db(filepath, data):
-    """Generic JSON database saver"""
-    with open(filepath, "w") as f:
-        json.dump(data, f, indent=4)
-
-
-def is_strong_password(password):
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters"
-    if not re.search(r"[A-Z]", password):
-        return False, "Password must contain uppercase letter"
-    if not re.search(r"[a-z]", password):
-        return False, "Password must contain lowercase letter"
-    if not re.search(r"[0-9]", password):
-        return False, "Password must contain digit"
-    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-        return False, "Password must contain special character"
-    return True, "Strong password"
-
-
-def authenticate(username, password):
+# ──────────────────────────────────────────────────────────────────────────────
+# AUTH
+# ──────────────────────────────────────────────────────────────────────────────
+def authenticate(username: str, password: str) -> str:
     users = load_users()
-
     if username not in users:
-        log_audit(username, "LOGIN_FAILED", "User does not exist")
         return "no_user"
-
-    user = users[username]
-
-    if user["locked_until"] > time.time():
-        log_audit(username, "LOGIN_BLOCKED", "Account locked")
+    u = users[username]
+    if u.get("locked_until", 0) > time.time():
         return "locked"
-
-    if user["password"] != hash_password(password):
-        user["failed_attempts"] += 1
-
-        if user["failed_attempts"] >= MAX_ATTEMPTS:
-            user["locked_until"] = time.time() + LOCK_TIME
+    if u["password"] != hash_pw(password):
+        u["failed_attempts"] = u.get("failed_attempts", 0) + 1
+        if u["failed_attempts"] >= MAX_ATTEMPTS:
+            u["locked_until"] = time.time() + LOCK_TIME
             save_users(users)
-            log_audit(username, "ACCOUNT_LOCKED", f"{MAX_ATTEMPTS} failed attempts")
+            log_audit(username, "ACCOUNT_LOCKED")
             return "locked"
-
         save_users(users)
-        log_audit(username, "LOGIN_FAILED", f"Wrong password (attempt {user['failed_attempts']})")
+        log_audit(username, "LOGIN_FAILED", f"Attempt {u['failed_attempts']}")
         return "wrong_password"
-
-    user["failed_attempts"] = 0
-    user["locked_until"] = 0
-    user["last_login"] = datetime.now().isoformat()
+    u["failed_attempts"] = 0
+    u["locked_until"]    = 0
+    u["last_login"]      = datetime.now().isoformat()
     save_users(users)
     log_audit(username, "LOGIN_SUCCESS", "Successful login")
     return "success"
 
-
-def register_user(username, password, role, email=""):
+def register_user(username: str, password: str, role: str, email: str = "") -> str:
     users = load_users()
-
     if username in users:
-        return "exists", "Username already exists"
-
-    is_strong, message = is_strong_password(password)
-    if not is_strong:
-        return "weak", message
-
+        return "exists"
+    if not is_strong(password):
+        return "weak"
     users[username] = {
-        "password": hash_password(password),
-        "role": role,
-        "email": email,
+        "password":        hash_pw(password),
+        "role":            role,
+        "email":           email,
         "failed_attempts": 0,
-        "locked_until": 0,
-        "created_at": datetime.now().isoformat(),
-        "last_login": None
+        "locked_until":    0,
+        "created_at":      datetime.now().isoformat(),
+        "two_fa_enabled":  False,
     }
-
     save_users(users)
-    log_audit(username, "USER_REGISTERED", f"New {role} registered")
-    return "success", "Registration successful"
+    log_audit(username, "USER_REGISTERED", f"New {role}")
+    return "success"
 
 
-def send_email_alert(to_email, subject, body):
-    """Send email notification for critical alerts"""
-    try:
-        config = load_json_db(NOTIFICATION_CONFIG)
-        if not config or not config[0].get("email_enabled"):
-            return False
-        
-        smtp_config = config[0]
-        
-        msg = MIMEMultipart()
-        msg['From'] = smtp_config.get("smtp_user")
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        
-        msg.attach(MIMEText(body, 'html'))
-        
-        server = smtplib.SMTP(smtp_config.get("smtp_server"), smtp_config.get("smtp_port"))
-        server.starttls()
-        server.login(smtp_config.get("smtp_user"), smtp_config.get("smtp_password"))
-        server.send_message(msg)
-        server.quit()
-        
-        return True
-    except Exception as e:
-        st.warning(f"Email notification failed: {e}")
-        return False
+# ──────────────────────────────────────────────────────────────────────────────
+# SESSION STATE
+# ──────────────────────────────────────────────────────────────────────────────
+for k, v in [
+    ("authenticated", False), ("username", None), ("role", None),
+    ("awaiting_2fa", False), ("syslog_collector", None),
+    ("live_refresh", False), ("last_refresh", 0.0),
+    ("last_alerts", []),     ("last_stats", {}),
+]:
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SIDEBAR THEME (always visible)
+# ──────────────────────────────────────────────────────────────────────────────
+st.sidebar.title("⚙️ Controls")
+theme = st.sidebar.selectbox("Theme", ["Dark Pro", "Cyber Blue", "Matrix", "Light Pro"])
+apply_theme(theme)
 
 
-def save_alert_to_history(alert):
-    """Save alert to historical database"""
-    history = load_json_db(ALERT_HISTORY_DB)
-    alert["saved_at"] = datetime.now().isoformat()
-    alert["acknowledged"] = False
-    alert["acknowledged_by"] = None
-    history.append(alert)
-    save_json_db(ALERT_HISTORY_DB, history)
-
-
-# -----------------------------
-# SESSION STATE INITIALIZATION
-# -----------------------------
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "role" not in st.session_state:
-    st.session_state.role = None
-if "alerts_data" not in st.session_state:
-    st.session_state.alerts_data = []
-if "stats_data" not in st.session_state:
-    st.session_state.stats_data = {}
-if "last_analysis_time" not in st.session_state:
-    st.session_state.last_analysis_time = None
-
-
-# -----------------------------
-# SIDEBAR THEME SELECTOR
-# -----------------------------
-st.sidebar.title("🎨 UI Control")
-theme = st.sidebar.selectbox(
-    "Choose Theme",
-    ["Light Pro", "Dark Pro", "Cyber Blue", "Matrix", "Sunset"]
-)
-apply_advanced_theme(theme)
-
-
-# -----------------------------
-# LOGIN PAGE WITH ENHANCED UI
-# -----------------------------
+# ══════════════════════════════════════════════════════════════════════════════
+# LOGIN / REGISTER PAGE
+# ══════════════════════════════════════════════════════════════════════════════
 if not st.session_state.authenticated:
-    
-    # Center login form with custom styling
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("<h1 style='text-align: center;'>🔐 SIEMSecure</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; opacity: 0.8;'>Advanced Security Information & Event Management</p>", unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        menu = st.radio("", ["🔑 Login", "📝 Register"], horizontal=True)
+    st.title("🔐 SIEMSecure Pro")
 
-        username = st.text_input("👤 Username", placeholder="Enter your username")
-        password = st.text_input("🔒 Password", type="password", placeholder="Enter your password")
+    menu = st.radio("", ["Login", "Register"], horizontal=True)
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
-        if menu == "🔑 Login":
-            col_a, col_b, col_c = st.columns([1, 2, 1])
-            with col_b:
-                if st.button("Login", use_container_width=True):
-                    if not username or not password:
-                        st.error("Please enter both username and password")
-                    else:
-                        result = authenticate(username, password)
+    if menu == "Login":
+        if st.button("Login", use_container_width=True):
+            result = authenticate(username, password)
+            if result == "success":
+                users = load_users()
+                user  = users.get(username, {})
+                if user.get("two_fa_enabled") and _TOTP_OK:
+                    st.session_state.awaiting_2fa = True
+                    st.session_state.username     = username
+                    st.session_state.role         = user["role"]
+                    st.rerun()
+                else:
+                    st.session_state.authenticated = True
+                    st.session_state.username      = username
+                    st.session_state.role          = user["role"]
+                    st.rerun()
+            elif result == "no_user":      st.error("User does not exist.")
+            elif result == "wrong_password": st.error("Incorrect password.")
+            elif result == "locked":       st.error("Account locked. Try again later.")
 
-                        if result == "success":
-                            users = load_users()
-                            st.session_state.authenticated = True
-                            st.session_state.username = username
-                            st.session_state.role = users[username]["role"]
-                            st.success("✅ Login successful!")
-                            time.sleep(0.5)
-                            st.rerun()
-                        elif result == "no_user":
-                            st.error("❌ User does not exist.")
-                        elif result == "wrong_password":
-                            st.error("❌ Incorrect password.")
-                        elif result == "locked":
-                            st.error(f"🔒 Account locked for {LOCK_TIME} seconds. Too many failed attempts.")
+    else:  # Register
+        role  = st.selectbox("Role", ["Analyst", "Admin"])
+        email = st.text_input("Email (used for alert notifications)")
+        if st.button("Register", use_container_width=True):
+            result = register_user(username, password, role, email)
+            if result == "success":    st.success("Registered! You can now log in.")
+            elif result == "exists":   st.error("Username already exists.")
+            elif result == "weak":     st.error("Password needs 8+ chars, 1 uppercase, 1 digit, 1 special character.")
 
-        else:  # Register
-            email = st.text_input("📧 Email", placeholder="your@email.com")
-            role = st.selectbox("👥 Role", ["Analyst", "Admin"])
-
-            col_a, col_b, col_c = st.columns([1, 2, 1])
-            with col_b:
-                if st.button("Register", use_container_width=True):
-                    if not username or not password:
-                        st.error("Please fill in all fields")
-                    else:
-                        result, message = register_user(username, password, role, email)
-
-                        if result == "success":
-                            st.success(f"✅ {message}. Please login now.")
-                        else:
-                            st.error(f"❌ {message}")
+    # 2FA verification step
+    if st.session_state.awaiting_2fa:
+        st.divider()
+        st.subheader("🔐 Two-Factor Authentication")
+        code = st.text_input("Enter 6-digit code from your authenticator app", max_chars=6)
+        if st.button("Verify"):
+            totp = TOTPManager()
+            if totp.verify(st.session_state.username, code.strip()):
+                st.session_state.authenticated = True
+                st.session_state.awaiting_2fa  = False
+                log_audit(st.session_state.username, "2FA_SUCCESS")
+                st.rerun()
+            else:
+                st.error("Invalid code. Try again.")
 
     st.stop()
 
 
-# -----------------------------
-# MAIN DASHBOARD - ENHANCED
-# -----------------------------
-st.markdown(f"""
-    <div style='background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; margin-bottom: 20px; backdrop-filter: blur(10px);'>
-        <h1 style='margin: 0;'>🔒 SIEM Command Center</h1>
-        <p style='margin: 5px 0 0 0; opacity: 0.8;'>Welcome, <strong>{st.session_state.username}</strong> ({st.session_state.role})</p>
-    </div>
-""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN DASHBOARD  (only reached when authenticated)
+# ══════════════════════════════════════════════════════════════════════════════
+st.title("🔒 SIEMSecure Pro")
+st.subheader(f"Welcome, **{st.session_state.username}**  ({st.session_state.role})")
 
-# Logout button in sidebar
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    log_audit(st.session_state.username, "LOGOUT", "User logged out")
-    st.session_state.authenticated = False
-    st.rerun()
+hdr1, hdr2 = st.columns([1, 1])
+with hdr1:
+    if st.button("Logout"):
+        log_audit(st.session_state.username, "LOGOUT")
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+with hdr2:
+    live = st.toggle("⚡ Auto-refresh every 30 s", value=st.session_state.live_refresh)
+    st.session_state.live_refresh = live
 
-if "alerts_data" not in st.session_state:
-    st.session_state.alerts_data = []
+if st.session_state.live_refresh:
+    if time.time() - st.session_state.last_refresh > 30:
+        st.session_state.last_refresh = time.time()
+        st.rerun()
 
-if "stats_data" not in st.session_state:
-    st.session_state.stats_data = {}
+# ── Sidebar: analysis options ──────────────────────────────────────────────────
+st.sidebar.header("Analysis Mode")
+mode = st.sidebar.radio("Mode", ["Test", "Live (SSH)", "Syslog Listener", "Windows Event Log"])
 
-if "last_analysis_time" not in st.session_state:
-    st.session_state.last_analysis_time = None
+log_file_path = remote_server = remote_user = remote_pass = None
 
-# -----------------------------
-# MAIN TABS
-# -----------------------------
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊 Dashboard", 
-    "🔍 Analysis", 
-    "📈 Statistics", 
+if mode == "Test":
+    log_file_path = st.sidebar.text_input("Log file path", value="logs/logs.txt")
+
+elif mode == "Live (SSH)":
+    remote_server = st.sidebar.text_input("Remote Server IP/hostname")
+    remote_user   = st.sidebar.text_input("SSH Username")
+    remote_pass   = st.sidebar.text_input("SSH Password", type="password")
+    remote_logpath = st.sidebar.text_input("Remote log path", value="/var/log/auth.log")
+    if remote_server:
+        st.sidebar.caption(f"Will connect to {remote_user}@{remote_server}")
+
+elif mode == "Syslog Listener":
+    sl_port  = st.sidebar.number_input("Listen Port", value=514, min_value=1, max_value=65535)
+    sl_proto = st.sidebar.selectbox("Protocol", ["UDP", "TCP"])
+    sc = st.session_state.syslog_collector
+    if sc and sc.get_status()["running"]:
+        st.sidebar.success(f"Listener active on {sl_proto}:{int(sl_port)}")
+    else:
+        st.sidebar.warning("Listener not started — see Settings → System")
+
+elif mode == "Windows Event Log":
+    if st.session_state.role == "Admin":
+        remote_server = st.sidebar.text_input("Remote Server (blank = local)")
+        remote_user   = st.sidebar.text_input("Remote Username")
+        remote_pass   = st.sidebar.text_input("Remote Password", type="password")
+    else:
+        st.sidebar.info("Admin required for Windows Event Log mode.")
+
+enrich_ips  = st.sidebar.checkbox("🌐 Enrich IPs via AbuseIPDB", value=_ENRICH_OK)
+send_emails = st.sidebar.checkbox("📧 Send email alerts", value=_NOTIF_OK)
+run_button  = st.sidebar.button("▶  Run Analysis", use_container_width=True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TABS
+# ──────────────────────────────────────────────────────────────────────────────
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "🏠 Dashboard",
     "🚨 Alerts",
+    "📊 Analytics",
+    "🛡️ Risk & Anomalies",
+    "📜 Audit Log",
     "⚙️ Settings",
-    "📜 Audit Log"
+    "📡 Live Monitor",
 ])
 
-# TAB 1: DASHBOARD OVERVIEW
-with tab1:
-    st.header("Real-Time Security Overview")
-    
-    # Top metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_alerts = len(st.session_state.alerts_data)
-        critical_alerts = len([a for a in st.session_state.alerts_data if a.get('severity') == 'CRITICAL'])
-        st.metric(
-            "Total Alerts",
-            total_alerts,
-            delta=f"+{critical_alerts} Critical" if critical_alerts > 0 else "0 Critical"
-        )
-    
-    with col2:
-        st.metric("Critical Threats", critical_alerts)
-    
-    with col3:
-        status = "🟢 Active" if st.session_state.alerts_data else "⚪ Idle"
-        st.metric("System Status", status)
-    
-    with col4:
-        last_scan = st.session_state.last_analysis_time if st.session_state.last_analysis_time else "Never"
-        st.metric("Last Scan", last_scan)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Quick stats visualization
-    if st.session_state.alerts_data:
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            # Severity distribution pie chart
-            df_alerts = pd.DataFrame(st.session_state.alerts_data)
-            if "severity" in df_alerts.columns:
-                severity_counts = df_alerts["severity"].value_counts()
-                
-                fig = go.Figure(data=[go.Pie(
-                    labels=severity_counts.index,
-                    values=severity_counts.values,
-                    hole=.3,
-                    marker=dict(colors=[SEVERITY_COLORS.get(s, "#888888") for s in severity_counts.index])
-                )])
-                fig.update_layout(
-                    title="Alert Severity Distribution",
-                    template="plotly_dark" if "Dark" in theme or "Matrix" in theme else "plotly_white"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with col_b:
-            # Rule distribution
-            if "rule" in df_alerts.columns:
-                rule_counts = df_alerts["rule"].value_counts().head(10)
-                
-                fig2 = go.Figure(data=[go.Bar(
-                    x=rule_counts.values,
-                    y=rule_counts.index,
-                    orientation='h',
-                    marker=dict(color='#00D9FF')
-                )])
-                fig2.update_layout(
-                    title="Top Alert Rules",
-                    xaxis_title="Count",
-                    yaxis_title="Rule",
-                    template="plotly_dark" if "Dark" in theme or "Matrix" in theme else "plotly_white"
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# RUN ANALYSIS PIPELINE
+# ══════════════════════════════════════════════════════════════════════════════
+if run_button:
+    if not _SIEM_OK:
+        st.error("SIEMFramework not available. Cannot run analysis.")
+    elif mode == "Live (SSH)" and st.session_state.role != "Admin":
+        st.error("Only Admins can run Live SSH mode.")
     else:
-        st.info("📊 Run an analysis in the 'Analysis' tab to see dashboard metrics.")
+        with st.spinner("Running SIEM analysis..."):
+            try:
+                # ── Build and run framework ────────────────────────────────
+                if mode == "Windows Event Log" and _WINEVENT_OK:
+                    wc  = WindowsEventCollector()
+                    raw = (wc.collect_remote(remote_server, remote_user, remote_pass)
+                           if remote_server else wc.collect())
+                    siem = SIEMFramework(test_mode=True)
+                    siem.raw_logs = raw
+                    siem.run_analysis()
 
-def fetch_remote_logs(server, username, password, remote_path="/var/log/auth.log"):
-    """
-    Connects to remote server via SSH and fetch log file.
-    """
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(server, username=username, password=password, timeout=10)
+                elif mode == "Syslog Listener" and _SYSLOG_OK:
+                    sc  = st.session_state.syslog_collector
+                    raw = sc.drain() if sc else []
+                    siem = SIEMFramework(test_mode=True)
+                    siem.raw_logs = raw
+                    siem.run_analysis()
 
-        stdin, stdout, stderr = ssh.exec_command(f"cat {remote_path}")
-        logs = stdout.read().decode()
-        ssh.close()
+                elif mode == "Live (SSH)":
+                    siem = SIEMFramework(
+                        log_file_path=log_file_path,
+                        live_mode=True,
+                        test_mode=False,
+                        remote_server=remote_server,
+                        remote_user=remote_user,
+                        remote_password=remote_pass,
+                    )
+                    siem.run_analysis()
 
-        if not logs:
-            raise Exception("No logs returned from remote server.")
+                else:  # Test
+                    siem = SIEMFramework(
+                        log_file_path=log_file_path,
+                        test_mode=True,
+                    )
+                    siem.run_analysis()
 
-        return logs.splitlines()
+                alerts = siem.alerts or []
+                stats  = siem.statistics or {}
 
-    except Exception as e:
-        raise Exception(f"Remote connection failed: {e}")
+                # ── IP Enrichment ──────────────────────────────────────────
+                if enrich_ips and _ENRICH_OK and alerts:
+                    with st.spinner("Enriching IPs with AbuseIPDB..."):
+                        enricher = IPEnrichment()
+                        alerts   = enricher.enrich_alerts(alerts)
 
-# =========================
-# TAB 2: ANALYSIS (UPDATED & STABLE)
-# =========================
-with tab2:
-    st.header("🔍 Security Analysis Engine")
+                # ── Save to history ────────────────────────────────────────
+                new_alerts = save_alert_history(alerts)
 
-    # -----------------------
-    # INITIALIZE SESSION STATE
-    # -----------------------
-    if "analysis_triggered" not in st.session_state:
-        st.session_state.analysis_triggered = False
-    if "alerts_data" not in st.session_state:
-        st.session_state.alerts_data = []
-    if "stats_data" not in st.session_state:
-        st.session_state.stats_data = {}
-    if "last_analysis_time" not in st.session_state:
-        st.session_state.last_analysis_time = None
+                # ── Email notifications ────────────────────────────────────
+                notif_results = []
+                if send_emails and _NOTIF_OK and new_alerts:
+                    notifier = NotificationEngine()
+                    notif_results = notifier.process_alerts(new_alerts)
 
-    # -----------------------
-    # MODE SELECTION
-    # -----------------------
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        mode = st.radio(
-            "Analysis Mode",
-            ["🧪 Test Mode (Local Logs)", "🔴 Live Mode (Remote)"],
-            horizontal=True
-        )
-    st.markdown("<br>", unsafe_allow_html=True)
+                # ── Risk scoring ───────────────────────────────────────────
+                if _RISK_OK and new_alerts:
+                    risk = RiskEngine()
+                    alerts = risk.calculate_risk(alerts)
 
-    # -----------------------
-    # TEST MODE (LOCAL FILE)
-    # -----------------------
-    if "Test" in mode:
-        siem_folder_exists = os.path.exists("SIEM_Hybrid_Framework")
-        default_path = "SIEM_Hybrid_Framework/logs/logs.txt" if siem_folder_exists else "logs/logs1.txt"
+                # ── Audit ──────────────────────────────────────────────────
+                mode_labels = {
+                    "Test":               "🧪 Test",
+                    "Live (SSH)":         "🔴 Live SSH",
+                    "Syslog Listener":    "📡 Syslog",
+                    "Windows Event Log":  "🪟 WinEvent",
+                }
+                log_audit(st.session_state.username, "ANALYSIS_RUN",
+                          f"Mode: {mode_labels.get(mode, mode)}, Alerts: {len(alerts)}")
 
-        log_file_path = st.text_input(
-            "📁 Log File Path",
-            value=default_path,
-            help="Path to your log file"
-        )
+                st.session_state.last_alerts = alerts
+                alerts = st.session_state.alerts_data
+                st.session_state.last_stats  = stats
 
-        if log_file_path:
-            if os.path.exists(log_file_path):
-                st.success(f"✅ File found: {log_file_path}")
-                with st.expander("👁️ Preview Log File (first 10 lines)"):
-                    try:
-                        with open(log_file_path, "r") as f:
-                            lines = f.readlines()[:10]
-                            st.code("".join(lines))
-                    except Exception as e:
-                        st.error(f"Error reading file: {e}")
-            else:
-                st.error(f"❌ File not found: {log_file_path}")
-
-        remote_server = remote_user = remote_pass = None
-
-    # -----------------------
-    # LIVE MODE (REMOTE SERVER DEMO)
-    # -----------------------
-    else:
-        log_file_path = None
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            remote_server = st.text_input("🌐 Remote Server (IP Address)")
-        with col_b:
-            remote_user = st.text_input("👤 Username")
-        with col_c:
-            remote_pass = st.text_input("🔒 Password", type="password")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # -----------------------
-    # RUN BUTTON
-    # -----------------------
-    run_col1, run_col2, run_col3 = st.columns([1, 2, 1])
-    with run_col2:
-        if st.button("▶️ Run Analysis", use_container_width=True, type="primary"):
-            st.session_state.analysis_triggered = True
-
-    # -----------------------
-    # RUN ANALYSIS
-    # -----------------------
-    if st.session_state.analysis_triggered:
-        try:
-            with st.spinner("🔄 Running SIEM Analysis..."):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-
-                # -----------------------
-                # INITIALIZE SIEM
-                # -----------------------
-                status_text.text("🔧 Initializing SIEM Framework...")
-                progress_bar.progress(15)
-                time.sleep(0.3)
-
-                if "Test" in mode:
-                    if not os.path.exists(log_file_path):
-                        st.error(f"❌ Log file not found: {log_file_path}")
-                        st.stop()
-                    siem = SIEMFramework(log_file_path=log_file_path)
-                else:
-                    # -----------------------
-                    # LIVE MODE DEMO (NO SERVER)
-                    # -----------------------
-                    status_text.text("🌐 Simulating Live Mode (Demo)...")
-                    progress_bar.progress(25)
-                    time.sleep(0.5)
-
-                    temp_demo_file = "live_demo_empty.txt"
-                    with open(temp_demo_file, "w") as f:
-                        f.write("")  # zero logs
-
-                    siem = SIEMFramework(log_file_path=temp_demo_file)
-                    siem.parsed_logs = []
-                    siem.alerts = []
-                    siem.statistics = {
-                        'general_stats': {
-                            'total_events': 0,
-                            'unique_ips': 0,
-                            'unique_users': 0,
-                            'failed_logins': 0,
-                            'successful_logins': 0,
-                            'event_type_breakdown': {}
-                        },
-                        'attack_breakdown': {},
-                        'top_attackers': []
-                    }
-
-                # -----------------------
-                # RUN ANALYSIS
-                # -----------------------
-                status_text.text("📊 Analyzing logs...")
-                progress_bar.progress(40)
-                time.sleep(0.3)
-                siem.run_analysis()
-                progress_bar.progress(70)
-                status_text.text("🔍 Processing detections...")
-                time.sleep(0.3)
-
-                # -----------------------
-                # STORE RESULTS
-                # -----------------------
-                st.session_state.alerts_data = siem.alerts.copy()
-                st.session_state.stats_data = siem.statistics.copy()
-                st.session_state.last_analysis_time = datetime.now().strftime("%H:%M:%S")
-
-                progress_bar.progress(85)
-
-                # Save to history (empty in demo)
-                for alert in siem.alerts:
-                    save_alert_to_history(alert)
-
-                # Email critical alerts (empty in demo)
-                critical_alerts = [a for a in siem.alerts if a.get("severity") == "CRITICAL"]
-                if critical_alerts:
-                    users = load_users()
-                    user_email = users.get(st.session_state.username, {}).get("email")
-                    if user_email:
-                        send_email_alert(
-                            user_email,
-                            f"🚨 {len(critical_alerts)} Critical Alerts",
-                            f"<h2>{len(critical_alerts)} Critical Alerts Detected</h2>"
-                        )
-
-                progress_bar.progress(100)
-                status_text.text("✅ Analysis complete!")
-
-                log_audit(
-                    st.session_state.username,
-                    "ANALYSIS_RUN",
-                    f"Mode: {mode}, Alerts: {len(siem.alerts)}"
-                )
-
-                # -----------------------
-                # SUCCESS SUMMARY
-                # -----------------------
+                # ── Result summary ─────────────────────────────────────────
                 st.success(
-                    f"✅ Analysis complete! "
-                    f"**{len(siem.alerts)} alerts** generated from "
-                    f"**{len(siem.parsed_logs)} logs**."
+                    f"✅ Analysis complete — **{len(alerts)}** alert(s) | "
+                    f"**{len(new_alerts)}** new"
+                )
+                if notif_results:
+                    for aid, ok, msg in notif_results:
+                        if ok:
+                            st.success(f"📧 Email sent for {aid}")
+                        else:
+                            st.warning(f"📧 Email failed for {aid}: {msg}")
+
+            except Exception as e:
+                st.error(f"Pipeline error: {e}")
+                import traceback; traceback.print_exc()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1  —  DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+with tab1:
+    history = load_json(ALERT_HISTORY_DB, [])
+    alerts  = st.session_state.last_alerts
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Total (history)",  len(history))
+    c2.metric("Critical",  sum(1 for a in history if a.get("severity") == "CRITICAL"))
+    c3.metric("High",      sum(1 for a in history if a.get("severity") == "HIGH"))
+    c4.metric("Unreviewed",sum(1 for a in history if not a.get("acknowledged")))
+    c5.metric("Session alerts", len(alerts))
+
+    if history:
+        df = pd.DataFrame(history)
+        r1, r2 = st.columns(2)
+        with r1:
+            if "severity" in df.columns:
+                sev = df["severity"].value_counts().reset_index()
+                sev.columns = ["Severity","Count"]
+                fig = px.pie(sev, names="Severity", values="Count", hole=0.4,
+                             color="Severity", color_discrete_map=SEVERITY_COLORS,
+                             title="Severity Distribution")
+                st.plotly_chart(fig, use_container_width=True)
+        with r2:
+            if "rule" in df.columns:
+                rules = df["rule"].value_counts().head(8).reset_index()
+                rules.columns = ["Rule","Count"]
+                fig2 = px.bar(rules, x="Count", y="Rule", orientation="h",
+                              title="Top Alert Rules", color="Count",
+                              color_continuous_scale="Reds")
+                st.plotly_chart(fig2, use_container_width=True)
+
+        if "timestamp" in df.columns:
+            df["ts"] = pd.to_datetime(df["timestamp"], errors="coerce")
+            df_s = df.dropna(subset=["ts"]).sort_values("ts")
+            fig3 = px.scatter(df_s, x="ts", y="severity", color="severity",
+                              color_discrete_map=SEVERITY_COLORS,
+                              hover_data=["rule","username","ip_address"],
+                              title="Alert Timeline")
+            st.plotly_chart(fig3, use_container_width=True)
+    else:
+        st.info("Run an analysis to populate the dashboard.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2  —  ALERTS
+# ══════════════════════════════════════════════════════════════════════════════
+with tab2:
+    st.header("🚨 Alert Management")
+    history = load_json(ALERT_HISTORY_DB, [])
+
+    if not isinstance(history, list):
+        history = []
+
+    if history:
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            f_sev = st.multiselect("Severity", ["CRITICAL","HIGH","MEDIUM","LOW"],
+                                   default=["CRITICAL","HIGH","MEDIUM","LOW"])
+        with fc2:
+            f_status = st.selectbox("Status", ["All","Acknowledged","Unacknowledged"])
+        with fc3:
+            all_rules = list(set(a.get("rule","") for a in history if a.get("rule")))
+            f_rule = st.multiselect("Rule", all_rules)
+
+        # Export
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            buf = io.StringIO()
+            w   = csv.DictWriter(buf, fieldnames=["alert_id","severity","rule","username","ip_address","timestamp","description"])
+            w.writeheader()
+            [w.writerow({k: a.get(k,"") for k in ["alert_id","severity","rule","username","ip_address","timestamp","description"]}) for a in history]
+            st.download_button("📥 Export CSV", buf.getvalue(),
+                               file_name=f"alerts_{datetime.now().strftime('%Y%m%d')}.csv",
+                               mime="text/csv")
+        with ec2:
+            st.download_button("📥 Export JSON", json.dumps(history, indent=2),
+                               file_name=f"alerts_{datetime.now().strftime('%Y%m%d')}.json",
+                               mime="application/json")
+
+        # Filter
+        filtered = [a for a in history if a.get("severity","") in f_sev]
+        if f_status == "Acknowledged":
+            filtered = [a for a in filtered if a.get("acknowledged")]
+        elif f_status == "Unacknowledged":
+            filtered = [a for a in filtered if not a.get("acknowledged")]
+        if f_rule:
+            filtered = [a for a in filtered if a.get("rule","") in f_rule]
+
+        st.markdown(f"**Showing {len(filtered)} of {len(history)} alerts**")
+
+        for idx, alert in enumerate(filtered):
+            sev   = alert.get("severity","LOW")
+            color = SEVERITY_COLORS.get(sev,"#888")
+            badge = {"CRITICAL":"🔴 CRITICAL","HIGH":"🟠 HIGH",
+                     "MEDIUM":"🟡 MEDIUM","LOW":"🟢 LOW"}.get(sev, sev)
+
+            enrich = alert.get("ip_enrichment",{})
+            enrich_html = ""
+            if enrich and not enrich.get("skipped") and not enrich.get("error"):
+                enrich_html = (
+                    f"<p style='font-size:12px;color:#aaa;margin:4px 0 0;'>"
+                    f"🌐 <b>Threat Intel:</b> "
+                    f"Abuse {enrich.get('abuse_confidence','?')}% | "
+                    f"Level: {enrich.get('threat_level','?')} | "
+                    f"Country: {enrich.get('country','?')} | "
+                    f"ISP: {enrich.get('isp','?')}"
+                    f"</p>"
                 )
 
-                st.markdown("### 📊 Quick Summary")
-                c1, c2, c3, c4 = st.columns(4)
-                with c1:
-                    st.metric("Total Logs", len(st.session_state.alerts_data) if st.session_state.stats_data=={} else len(siem.parsed_logs))
-                with c2:
-                    st.metric("Total Alerts", len(st.session_state.alerts_data))
-                with c3:
-                    st.metric(
-                        "Critical",
-                        len([a for a in st.session_state.alerts_data if a.get("severity") == "CRITICAL"])
-                    )
-                with c4:
-                    st.metric(
-                        "High",
-                        len([a for a in st.session_state.alerts_data if a.get("severity") == "HIGH"])
-                    )
-
-                # Preview
-                if st.session_state.alerts_data:
-                    st.markdown("### 🚨 Alert Preview")
-                    preview_df = pd.DataFrame(st.session_state.alerts_data[:5])
-                    st.dataframe(
-                        preview_df[["alert_id", "severity", "rule", "description"]],
-                        use_container_width=True
-                    )
-
-                st.info("💡 View complete results in the **Dashboard** and **Statistics** tabs!")
-
-        except FileNotFoundError as e:
-            st.error(f"❌ File not found: {e}")
-
-        except Exception as e:
-            st.error(f"❌ Analysis failed: {e}")
-            log_audit(
-                st.session_state.username,
-                "ANALYSIS_FAILED",
-                str(e)
-            )
-            with st.expander("🔍 View Error Details"):
-                import traceback
-                st.code(traceback.format_exc())
-
-# TAB 3: STATISTICS (Enhanced)
-with tab3:
-    st.header("📈 Advanced Security Statistics")
-    
-    if st.session_state.stats_data and 'general_stats' in st.session_state.stats_data:
-        stats = st.session_state.stats_data
-        
-        # Multi-column metrics
-        st.subheader("📊 General Statistics")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        general_stats = stats.get('general_stats', {})
-        
-        with col1:
-            st.metric("Total Events", general_stats.get('total_events', 0))
-        with col2:
-            st.metric("Unique IPs", general_stats.get('unique_ips', 0))
-        with col3:
-            st.metric("Unique Users", general_stats.get('unique_users', 0))
-        with col4:
-            st.metric("Failed Logins", general_stats.get('failed_logins', 0))
-        with col5:
-            st.metric("Successful Logins", general_stats.get('successful_logins', 0))
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Attack breakdown
-        if 'attack_breakdown' in stats and stats['attack_breakdown']:
-            st.subheader("🎯 Attack Type Breakdown")
-            attack_df = pd.DataFrame(list(stats['attack_breakdown'].items()), columns=['Attack Type', 'Count'])
-            attack_df = attack_df.sort_values('Count', ascending=False)
-            
-            fig = px.bar(
-                attack_df,
-                x='Attack Type',
-                y='Count',
-                title="Attack Types Detected",
-                color='Count',
-                color_continuous_scale='Reds'
-            )
-            fig.update_layout(
-                template="plotly_dark" if "Dark" in theme or "Matrix" in theme else "plotly_white"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Top attackers
-        if 'top_attackers' in stats and stats['top_attackers']:
-            st.subheader("🎯 Top Attacking IPs")
-            attackers_df = pd.DataFrame(stats['top_attackers'])
-            st.dataframe(attackers_df, use_container_width=True)
-        
-        # Event type breakdown
-        if 'event_type_breakdown' in general_stats:
-            st.subheader("📋 Event Type Distribution")
-            event_df = pd.DataFrame(list(general_stats['event_type_breakdown'].items()), 
-                                   columns=['Event Type', 'Count'])
-            
-            fig2 = px.pie(
-                event_df,
-                values='Count',
-                names='Event Type',
-                title="Event Type Distribution"
-            )
-            fig2.update_layout(
-                template="plotly_dark" if "Dark" in theme or "Matrix" in theme else "plotly_white"
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-        
-    else:
-        st.info("📊 Run an analysis in the 'Analysis' tab to view statistics.")
-
-# =========================
-# TAB 4: ALERTS MANAGEMENT (FIXED VERSION)
-# =========================
-with tab4:
-    st.header("🚨 Alert Management Center")
-
-    # -----------------------
-    # FILTERS
-    # -----------------------
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        filter_severity = st.multiselect(
-            "Severity",
-            ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-            default=["CRITICAL", "HIGH", "MEDIUM", "LOW"]
-        )
-
-    with col2:
-        filter_status = st.selectbox(
-            "Status",
-            ["All", "Acknowledged", "Unacknowledged"]
-        )
-
-    with col3:
-        filter_timerange = st.selectbox(
-            "Time Range",
-            ["Last Hour", "Last 24 Hours", "Last 7 Days", "All Time"]
-        )
-
-    # -----------------------
-    # LOAD ALERT HISTORY
-    # -----------------------
-    alert_history = load_json_db(ALERT_HISTORY_DB)
-
-    if alert_history:
-
-        filtered_alerts = alert_history.copy()
-
-        # -----------------------
-        # APPLY FILTERS
-        # -----------------------
-
-        # Severity filter
-        filtered_alerts = [
-            a for a in filtered_alerts
-            if a.get("severity") in filter_severity
-        ]
-
-        # Status filter
-        if filter_status == "Acknowledged":
-            filtered_alerts = [
-                a for a in filtered_alerts
-                if a.get("acknowledged")
-            ]
-
-        elif filter_status == "Unacknowledged":
-            filtered_alerts = [
-                a for a in filtered_alerts
-                if not a.get("acknowledged")
-            ]
-
-        st.markdown(f"**Showing {len(filtered_alerts)} alerts**")
-
-        # -----------------------
-        # DISPLAY ALERTS
-        # -----------------------
-        for idx, alert in enumerate(filtered_alerts):
-
-            severity = alert.get("severity", "LOW")
-
-            if severity == "CRITICAL":
-                badge = "🔴 CRITICAL"
-                color = "#FF0000"
-            elif severity == "HIGH":
-                badge = "🟠 HIGH"
-                color = "#FF6B00"
-            elif severity == "MEDIUM":
-                badge = "🟡 MEDIUM"
-                color = "#FFA500"
-            else:
-                badge = "🟢 LOW"
-                color = "#00C851"
+            escalated = ""
+            if alert.get("severity_escalated"):
+                escalated = f"<span style='color:{color};font-size:11px;'> ⬆ Escalated from {alert.get('severity_original','?')}</span>"
 
             st.markdown(
-                f"""
-                <div style="
-                    border-left: 6px solid {color};
-                    padding: 15px;
-                    margin-bottom: 12px;
-                    background-color: rgba(255,255,255,0.05);
-                    border-radius: 10px;
-                ">
-                    <h4 style="margin-bottom:5px;">{badge} - {alert.get('rule', 'Unknown')}</h4>
-                    <p><strong>Time:</strong> {alert.get('timestamp', 'N/A')}</p>
-                    <p><strong>User:</strong> {alert.get('username', 'N/A')} |
-                       <strong>IP:</strong> {alert.get('ip_address', 'N/A')}</p>
-                    <p><strong>Description:</strong> {alert.get('description', 'N/A')}</p>
-                    <p><strong>Alert ID:</strong> {alert.get('alert_id', 'N/A')}</p>
-                </div>
-                """,
-                unsafe_allow_html=True
+                f"""<div style="border-left:6px solid {color};padding:14px 18px;
+                margin-bottom:10px;background:rgba(255,255,255,0.04);border-radius:10px;">
+                <h4 style="margin:0 0 6px;">{badge} — {alert.get('rule','?')}{escalated}</h4>
+                <p style="margin:2px 0;"><b>ID:</b> {alert.get('alert_id','?')} &nbsp;|&nbsp;
+                   <b>Time:</b> {alert.get('timestamp','?')[:19]} &nbsp;|&nbsp;
+                   <b>User:</b> {alert.get('username','N/A')} &nbsp;|&nbsp;
+                   <b>IP:</b> {alert.get('ip_address','N/A')}</p>
+                <p style="margin:4px 0;">{alert.get('description','N/A')}</p>
+                {enrich_html}
+                </div>""",
+                unsafe_allow_html=True,
             )
 
-            # -----------------------
-            # ACKNOWLEDGE SECTION (FIXED INDENTATION)
-            # -----------------------
             if alert.get("acknowledged"):
-                st.success(
-                    f"✅ Acknowledged by {alert.get('acknowledged_by')} "
-                    f"at {alert.get('acknowledged_at')}"
-                )
+                st.success(f"✅ Acked by {alert.get('acknowledged_by','?')} at {alert.get('acknowledged_at','?')}")
             else:
-                if st.button(
-                    "✅ Acknowledge",
-                    key=f"ack_{alert.get('alert_id')}_{idx}"
-                ):
-                    # Update correct alert in original history
-                    for i, a in enumerate(alert_history):
+                if st.button("✅ Acknowledge", key=f"ack_{alert.get('alert_id')}_{idx}"):
+                    for i, a in enumerate(history):
                         if a.get("alert_id") == alert.get("alert_id"):
-                            alert_history[i]["acknowledged"] = True
-                            alert_history[i]["acknowledged_by"] = st.session_state.username
-                            alert_history[i]["acknowledged_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            history[i].update({
+                                "acknowledged":    True,
+                                "acknowledged_by": st.session_state.username,
+                                "acknowledged_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            })
                             break
-
-                    save_json_db(ALERT_HISTORY_DB, alert_history)
-
-                    log_audit(
-                        st.session_state.username,
-                        "ALERT_ACKNOWLEDGED",
-                        alert.get("alert_id")
-                    )
-
-                    st.success("✅ Alert acknowledged successfully!")
+                    save_json(ALERT_HISTORY_DB, history)
+                    log_audit(st.session_state.username, "ALERT_ACKNOWLEDGED", alert.get("alert_id"))
                     st.rerun()
+    else:
+        st.info("No alerts yet. Run an analysis to generate alerts.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3  —  ANALYTICS
+# ══════════════════════════════════════════════════════════════════════════════
+with tab3:
+    st.header("📊 Security Analytics")
+    
+    # Use dashboard_data if available, else fall back to alert history
+    df = st.session_state.get('dashboard_data', pd.DataFrame())
+    history = load_json(ALERT_HISTORY_DB, [])
+
+    if not df.empty:
+        st.subheader("Log File Overview")
+        st.dataframe(df.head(10))
+
+        # Example: Log Type Distribution (if 'type' column exists)
+        if 'type' in df.columns:
+            type_count = df['type'].value_counts().reset_index()
+            type_count.columns = ['Type', 'Count']
+            fig1 = px.bar(type_count, x='Type', y='Count', title="Log Type Distribution", color='Count', color_continuous_scale='Blues')
+            st.plotly_chart(fig1, use_container_width=True)
+
+        # Example: Logs Over Time (if 'timestamp' column exists)
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            df_sorted = df.dropna(subset=['timestamp']).sort_values('timestamp')
+            fig2 = px.line(df_sorted, x='timestamp', y='type' if 'type' in df_sorted.columns else df_sorted.columns[0],
+                           title="Logs Over Time")
+            st.plotly_chart(fig2, use_container_width=True)
+
+    elif history:
+        st.info("No uploaded log file, using alert history for analytics.")
+
+        df_hist = pd.DataFrame(history)
+        if 'severity' in df_hist.columns:
+            sev_count = df_hist['severity'].value_counts().reset_index()
+            sev_count.columns = ['Severity', 'Count']
+            fig3 = px.pie(sev_count, names='Severity', values='Count', title="Severity Distribution", hole=0.3)
+            st.plotly_chart(fig3, use_container_width=True)
 
     else:
-        st.info("📭 No alerts yet. Run an analysis to generate alerts.")
+        st.info("Run an analysis or upload a log file to see analytics.")
 
-# TAB 5: SETTINGS
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4  —  RISK & ANOMALIES
+# ══════════════════════════════════════════════════════════════════════════════
+with tab4:
+    st.header("🛡️ Risk & Anomalies")
+    
+    alerts = st.session_state.get('alerts_data', st.session_state.get('last_alerts', []))
+
+    if alerts:
+        df_alerts = pd.DataFrame(alerts)
+
+        if 'risk_score' in df_alerts.columns:
+            st.subheader("Risk Scores Distribution")
+            fig_risk = px.histogram(df_alerts, x='risk_score', nbins=20, title="Risk Score Histogram")
+            st.plotly_chart(fig_risk, use_container_width=True)
+
+        if 'anomaly' in df_alerts.columns:
+            anomaly_count = df_alerts['anomaly'].value_counts().reset_index()
+            anomaly_count.columns = ['Anomaly', 'Count']
+            st.subheader("Anomaly Types")
+            fig_anom = px.bar(anomaly_count, x='Anomaly', y='Count', title="Detected Anomalies", color='Count', color_continuous_scale='Reds')
+            st.plotly_chart(fig_anom, use_container_width=True)
+
+        st.dataframe(df_alerts[['alert_id','severity','rule','risk_score','anomaly']].head(10))
+    else:
+        st.info("No alerts found — run an analysis to see Risk & Anomalies.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 5  —  AUDIT LOG
+# ══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.header("⚙️ System Settings")
-    
-    settings_tab1, settings_tab2, settings_tab3 = st.tabs(["📧 Notifications", "👥 User Management", "🔧 System Config"])
-    
-    # Notifications settings
-    with settings_tab1:
-        st.subheader("Email Notification Configuration")
-        
-        config_data = load_json_db(NOTIFICATION_CONFIG)
-        current_config = config_data[0] if config_data else {}
-        
-        email_enabled = st.checkbox("Enable Email Notifications", value=current_config.get('email_enabled', False))
-        
-        if email_enabled:
-            smtp_server = st.text_input("SMTP Server", value=current_config.get('smtp_server', 'smtp.gmail.com'))
-            smtp_port = st.number_input("SMTP Port", value=current_config.get('smtp_port', 587))
-            smtp_user = st.text_input("SMTP Username", value=current_config.get('smtp_user', ''))
-            smtp_password = st.text_input("SMTP Password", type="password")
-            
-            if st.button("💾 Save Email Config"):
-                save_json_db(NOTIFICATION_CONFIG, [{
-                    'email_enabled': email_enabled,
-                    'smtp_server': smtp_server,
-                    'smtp_port': smtp_port,
-                    'smtp_user': smtp_user,
-                    'smtp_password': smtp_password
-                }])
-                st.success("✅ Email configuration saved!")
-                log_audit(st.session_state.username, "CONFIG_UPDATED", "Email notifications")
-    
-    # User management
-    with settings_tab2:
-        if st.session_state.role == "Admin":
-            st.subheader("👥 Manage Users")
-            
-            users = load_users()
-            
-            if users:
-                users_df = pd.DataFrame([
-                    {
-                        'Username': username,
-                        'Role': user['role'],
-                        'Email': user.get('email', 'N/A'),
-                        'Last Login': user.get('last_login', 'Never')[:19] if user.get('last_login') else 'Never',
-                        'Status': '🔒 Locked' if user['locked_until'] > time.time() else '✅ Active'
-                    }
-                    for username, user in users.items()
-                ])
-                
-                st.dataframe(users_df, use_container_width=True)
-                
-                # Delete user
-                user_to_delete = st.selectbox("Select user to delete", list(users.keys()))
-                
-                if st.button("🗑️ Delete User"):
-                    if user_to_delete == st.session_state.username:
-                        st.error("❌ Cannot delete your own account!")
-                    else:
-                        del users[user_to_delete]
-                        save_users(users)
-                        log_audit(st.session_state.username, "USER_DELETED", user_to_delete)
-                        st.success(f"✅ User {user_to_delete} deleted.")
-                        st.rerun()
-            else:
-                st.info("No users found.")
-        else:
-            st.warning("🔒 Admin access required for user management.")
-    
-    # System config
-    with settings_tab3:
-        st.subheader("🔧 System Configuration")
-        
-        st.number_input("Max Login Attempts", value=MAX_ATTEMPTS, min_value=1, max_value=10)
-        st.number_input("Account Lock Time (seconds)", value=LOCK_TIME, min_value=30, max_value=3600)
-        
-        if st.button("💾 Save System Config"):
-            st.success("✅ System configuration saved!")
-
-
-# TAB 6: AUDIT LOG
-with tab6:
     st.header("📜 Security Audit Log")
-    
-    audit_data = load_json_db(AUDIT_LOG)
-    
-    if audit_data:
-        # Filter options
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            filter_user = st.multiselect("Filter by User", list(set([a['username'] for a in audit_data])))
-        
-        with col2:
-            filter_action = st.multiselect("Filter by Action", list(set([a['action'] for a in audit_data])))
-        
-        # Apply filters
-        filtered_audit = audit_data
-        if filter_user:
-            filtered_audit = [a for a in filtered_audit if a['username'] in filter_user]
-        if filter_action:
-            filtered_audit = [a for a in filtered_audit if a['action'] in filter_action]
-        
-        # Display as DataFrame
+    audit = load_json(AUDIT_LOG_FILE, [])
+
+    if isinstance(audit, list) and audit:
+        ac1, ac2 = st.columns(2)
+        with ac1:
+            f_user = st.multiselect("Filter by user",
+                                    list(set(a.get("username","") for a in audit)))
+        with ac2:
+            f_action = st.multiselect("Filter by action",
+                                      list(set(a.get("action","") for a in audit)))
+
+        filtered_audit = audit
+        if f_user:
+            filtered_audit = [a for a in filtered_audit if a.get("username","") in f_user]
+        if f_action:
+            filtered_audit = [a for a in filtered_audit if a.get("action","") in f_action]
+
+        st.markdown(f"**{len(filtered_audit)} entries**")
         audit_df = pd.DataFrame(filtered_audit)
         st.dataframe(audit_df, use_container_width=True)
-        
-        # Download audit log
-        if st.button("📥 Download Audit Log"):
-            csv = audit_df.to_csv(index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name=f"audit_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
+
+        st.download_button("📥 Download CSV", audit_df.to_csv(index=False),
+                           file_name=f"audit_{datetime.now().strftime('%Y%m%d')}.csv",
+                           mime="text/csv")
     else:
-        st.info("📭 No audit log entries yet.")
+        st.info("No audit entries yet.")
 
 
-# -----------------------------
-# FOOTER
-# -----------------------------
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("""
-    <div style='text-align: center; opacity: 0.6; padding: 20px;'>
-        <p>SIEMSecure Pro v2.0 | Advanced Security Information & Event Management</p>
-        <p>Powered by AI-Driven Threat Intelligence | © 2024</p>
-    </div>
-""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 6  —  SETTINGS
+# ══════════════════════════════════════════════════════════════════════════════
+with tab6:
+    st.header("⚙️ System Settings")
+    s1, s2, s3, s4 = st.tabs(["📧 Email Alerts", "👥 Users", "🔐 2FA", "🔧 System"])
+
+    # ── Email ──────────────────────────────────────────────────────────────────
+    with s1:
+        st.subheader("Email Notification Configuration")
+
+        if _NOTIF_OK:
+            cur_cfg = load_smtp_config()
+
+            # Show current credential source
+            has_env_pw = bool(os.getenv("SMTP_PASSWORD"))
+            has_json_pw = False
+            try:
+                raw = load_json(NOTIFICATION_CFG, [])
+                entry = raw[0] if isinstance(raw, list) and raw else raw
+                has_json_pw = bool(entry.get("smtp_password","")) if isinstance(entry, dict) else False
+            except Exception:
+                pass
+
+            if has_env_pw:
+                st.success("🔒 Password loaded from .env (secure)")
+            elif has_json_pw:
+                st.warning("⚠️ Password stored in notification_config.json — move to .env for security")
+            else:
+                st.error("❌ No SMTP password found. Enter one below.")
+
+            st.markdown("**Routing:** CRITICAL & HIGH = immediate email | MEDIUM = hourly digest | LOW = daily digest")
+            st.divider()
+
+            email_on  = st.checkbox("Enable Email Notifications",
+                                    value=cur_cfg.get("email_enabled", False))
+            smtp_host = st.text_input("SMTP Server", value=cur_cfg.get("smtp_server","smtp.gmail.com"))
+            smtp_port = st.number_input("SMTP Port", value=int(cur_cfg.get("smtp_port", 587)), step=1)
+            smtp_user = st.text_input("SMTP Username (your Gmail)",
+                                      value=cur_cfg.get("smtp_user",""))
+            smtp_pass = st.text_input(
+                "SMTP Password (Gmail App Password)",
+                type="password",
+                value="",
+                help="For Gmail: Google Account → Security → 2-Step Verification → App passwords"
+            )
+            recipient = st.text_input("Alert Recipient Email",
+                                      value=cur_cfg.get("recipient", cur_cfg.get("smtp_user","")))
+
+            c_save, c_test, c_hourly, c_daily = st.columns(4)
+
+            with c_save:
+                if st.button("💾 Save Config"):
+                    new_entry = {
+                        "email_enabled": email_on,
+                        "smtp_server":   smtp_host,
+                        "smtp_port":     int(smtp_port),
+                        "smtp_user":     smtp_user,
+                        "recipient":     recipient,
+                    }
+                    if smtp_pass:
+                        new_entry["smtp_password"] = smtp_pass
+                    save_json(NOTIFICATION_CFG, [new_entry])
+                    log_audit(st.session_state.username, "CONFIG_UPDATED", "Email notifications")
+                    st.success("Saved!")
+
+            with c_test:
+                if st.button("📨 Test Email"):
+                    # If user just typed a password, apply it temporarily
+                    if smtp_pass:
+                        os.environ["SMTP_PASSWORD"] = smtp_pass
+                    if smtp_user:
+                        os.environ["SMTP_USER"]     = smtp_user
+                    if recipient:
+                        os.environ["ALERT_RECIPIENT"] = recipient
+                    notifier = NotificationEngine()
+                    ok, msg = notifier.send_test_email()
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+
+            with c_hourly:
+                if st.button("📤 Send Hourly Digest"):
+                    notifier = NotificationEngine()
+                    ok, msg = notifier.flush_digest("hourly")
+                    st.success(msg) if ok else st.warning(msg)
+
+            with c_daily:
+                if st.button("📤 Send Daily Digest"):
+                    notifier = NotificationEngine()
+                    ok, msg = notifier.flush_digest("daily")
+                    st.success(msg) if ok else st.warning(msg)
+
+            # Gmail App Password help
+            with st.expander("ℹ️ How to create a Gmail App Password"):
+                st.markdown("""
+1. Go to **myaccount.google.com**
+2. Click **Security** in the left sidebar
+3. Enable **2-Step Verification** if not already on
+4. Search for **App passwords** or go to: myaccount.google.com/apppasswords
+5. App name: `SIEMSecure` → click **Create**
+6. Copy the 16-character password → paste above as SMTP Password
+7. Click **Save Config** then **Test Email**
+                """)
+        else:
+            st.error("NotificationEngine not available. Check that `core/notification_engine.py` exists.")
+            st.code("Expected: <project_root>/core/notification_engine.py")
+
+    # ── Users ──────────────────────────────────────────────────────────────────
+    with s2:
+        if st.session_state.role == "Admin":
+            st.subheader("User Management")
+            users = load_users()
+            if users:
+                u_df = pd.DataFrame([{
+                    "Username":   u,
+                    "Role":       d["role"],
+                    "Email":      d.get("email","—"),
+                    "2FA":        "✅" if d.get("two_fa_enabled") else "—",
+                    "Last Login": (d.get("last_login","Never")[:19] if d.get("last_login") else "Never"),
+                    "Status":     "🔒 Locked" if d.get("locked_until",0) > time.time() else "✅ Active",
+                } for u, d in users.items()])
+                st.dataframe(u_df, use_container_width=True)
+
+                du1, du2 = st.columns(2)
+                with du1:
+                    del_user = st.selectbox("Delete user", list(users.keys()))
+                    if st.button("🗑️ Delete"):
+                        if del_user == st.session_state.username:
+                            st.error("Cannot delete your own account.")
+                        else:
+                            del users[del_user]
+                            save_users(users)
+                            if _TOTP_OK:
+                                TOTPManager().remove_user(del_user)
+                            log_audit(st.session_state.username, "USER_DELETED", del_user)
+                            st.success(f"Deleted {del_user}")
+                            st.rerun()
+                with du2:
+                    locked = [u for u, d in users.items() if d.get("locked_until",0) > time.time()]
+                    if locked:
+                        unlock_user = st.selectbox("Unlock account", locked)
+                        if st.button("🔓 Unlock"):
+                            users[unlock_user]["locked_until"]    = 0
+                            users[unlock_user]["failed_attempts"] = 0
+                            save_users(users)
+                            log_audit(st.session_state.username, "ACCOUNT_UNLOCKED", unlock_user)
+                            st.success(f"Unlocked {unlock_user}")
+                            st.rerun()
+        else:
+            st.warning("Admin access required.")
+
+    # ── 2FA ────────────────────────────────────────────────────────────────────
+    with s3:
+        st.subheader("Two-Factor Authentication")
+        if not _TOTP_OK:
+            st.error("pyotp not installed. Run: `pip install pyotp qrcode[pil]`")
+        else:
+            totp_mgr = TOTPManager()
+            cur      = st.session_state.username
+            users    = load_users()
+            has_2fa  = totp_mgr.has_2fa(cur)
+
+            if has_2fa:
+                st.success(f"✅ 2FA enabled for **{cur}**")
+                fa1, fa2 = st.columns(2)
+                with fa1:
+                    if st.button("♻️ Regenerate"):
+                        secret, _ = totp_mgr.setup_user(cur, users.get(cur,{}).get("email",""))
+                        users[cur]["two_fa_enabled"] = True
+                        save_users(users)
+                        qr = totp_mgr.get_qr_as_base64(cur)
+                        if qr:
+                            st.image(f"data:image/png;base64,{qr}", caption="Scan with authenticator app")
+                        st.code(f"Manual key: {secret}")
+                with fa2:
+                    if st.button("🗑️ Disable 2FA"):
+                        totp_mgr.remove_user(cur)
+                        users[cur]["two_fa_enabled"] = False
+                        save_users(users)
+                        st.success("2FA disabled.")
+                        st.rerun()
+            else:
+                st.info("2FA is not enabled for your account.")
+                if st.button("🔐 Enable 2FA"):
+                    secret, _ = totp_mgr.setup_user(cur, users.get(cur,{}).get("email",""))
+                    if secret:
+                        users[cur]["two_fa_enabled"] = True
+                        save_users(users)
+                        qr = totp_mgr.get_qr_as_base64(cur)
+                        if qr:
+                            st.image(f"data:image/png;base64,{qr}", caption="Scan with Google Authenticator / Authy")
+                        st.code(f"Manual key: {secret}")
+                        st.success("2FA enabled! Scan the QR, log out, and log back in to test.")
+                        log_audit(cur, "2FA_ENABLED")
+
+    # ── System ─────────────────────────────────────────────────────────────────
+    with s4:
+        st.subheader("Module Status")
+        status_rows = [
+            ("SIEMFramework",          _SIEM_OK,    "main.py in project root"),
+            ("NotificationEngine",     _NOTIF_OK,   "core/notification_engine.py"),
+            ("IPEnrichmentEngine",     _ENRICH_OK,  "core/ip_enrichment.py + ABUSEIPDB_API_KEY in .env"),
+            ("RiskEngine",             _RISK_OK,    "core/risk_engine.py"),
+            ("TOTPManager",            _TOTP_OK,    "core/totp_manager.py + pip install pyotp qrcode[pil]"),
+            ("SyslogCollector",        _SYSLOG_OK,  "core/syslog_collector.py"),
+            ("WindowsEventCollector",  _WINEVENT_OK,"core/windows_event_collector.py"),
+        ]
+        for name, ok, note in status_rows:
+            icon = "✅" if ok else "❌"
+            st.markdown(f"{icon} **{name}** {'— ' + note if not ok else ''}")
+
+        st.divider()
+        st.subheader("Syslog Listener")
+        if _SYSLOG_OK:
+            sc = st.session_state.syslog_collector
+            if sc and sc.get_status()["running"]:
+                status = sc.get_status()
+                st.success(f"Running on {status['protocol']}:{status['port']} | {status['buffered']} buffered messages")
+                if st.button("⏹ Stop Listener"):
+                    sc.stop()
+                    st.session_state.syslog_collector = None
+                    st.rerun()
+            else:
+                sys_port  = st.number_input("Port", value=514, key="sys_sl_port")
+                sys_proto = st.selectbox("Protocol", ["UDP","TCP"], key="sys_sl_proto")
+                if st.button("▶ Start Syslog Listener"):
+                    new_sc = SyslogCollector(port=int(sys_port), protocol=sys_proto.lower())
+                    new_sc.start_background()
+                    st.session_state.syslog_collector = new_sc
+                    log_audit(st.session_state.username, "SYSLOG_STARTED", f"{sys_proto}:{sys_port}")
+                    st.success(f"Started on {sys_proto}:{int(sys_port)}")
+                    st.rerun()
+        else:
+            st.warning("core/syslog_collector.py not found.")
+
+        st.divider()
+        st.subheader("Windows Event Log")
+        if _WINEVENT_OK:
+            wc = WindowsEventCollector()
+            ws = wc.get_status()
+            st.write(f"Local (pywin32): {'✅' if ws['local_available'] else '❌ — run on Windows + pip install pywin32'}")
+            st.write(f"Remote (SSH):    {'✅' if ws['remote_available'] else '❌ — pip install paramiko'}")
+        else:
+            st.warning("core/windows_event_collector.py not found.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 7  —  LIVE MONITOR
+# ══════════════════════════════════════════════════════════════════════════════
+with tab7:
+    st.header("📡 Live Monitor")
+    history = load_json(ALERT_HISTORY_DB, [])
+
+    if isinstance(history, list) and history:
+        recent = sorted(history, key=lambda a: a.get("timestamp",""), reverse=True)[:15]
+        st.markdown("**Latest 15 alerts** (newest first):")
+        for a in recent:
+            sev   = a.get("severity","LOW")
+            color = SEVERITY_COLORS.get(sev,"#888")
+            ack   = "✅" if a.get("acknowledged") else "🔔"
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;'
+                f'margin-bottom:5px;background:rgba(255,255,255,0.04);border-radius:8px;'
+                f'border-left:4px solid {color};">'
+                f'<span style="font-size:16px;">{ack}</span>'
+                f'<span style="color:{color};font-weight:bold;min-width:90px;">{sev}</span>'
+                f'<span style="min-width:220px;">{a.get("rule","?")}</span>'
+                f'<span style="color:#aaa;font-size:12px;min-width:140px;">{a.get("timestamp","?")[:19]}</span>'
+                f'<span style="color:#aaa;font-size:12px;margin-left:auto;">{a.get("ip_address","?")}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        sc = st.session_state.syslog_collector
+        if sc:
+            st.divider()
+            status = sc.get_status()
+            st.info(f"📡 Syslog listener active on {status['protocol']}:{status['port']} "
+                    f"— {status['buffered']} messages buffered. "
+                    f"Switch to **Syslog Listener** mode and click **Run Analysis** to process them.")
+    else:
+        st.info("No alert history. Run an analysis to start monitoring.")
+
+# Footer
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='text-align:center;opacity:0.45;font-size:11px;padding:12px;'>"
+    "SIEMSecure Pro v3.1 &nbsp;·&nbsp; Advanced SIEM &nbsp;·&nbsp; AI-Driven Threat Intelligence"
+    "</div>",
+    unsafe_allow_html=True,
+)

@@ -1,41 +1,32 @@
 ================================================================================
                   SIEM HYBRID FRAMEWORK - SECURITY STATISTICS                   
-                         Generated: 2026-03-06 12:38:44                         
+                         Generated: 2026-03-31 11:34:33                         
 ================================================================================
 
 GENERAL STATISTICS
 --------------------------------------------------------------------------------
-Total Events                   9
-Unique Ips                     3
+Total Events                   4
+Unique Ips                     1
 Unique Users                   1
-Failed Logins                  5
-Successful Logins              2
-File Accesses                  1
-Privilege Escalations          1
+Failed Logins                  0
+Successful Logins              0
+File Accesses                  0
+Privilege Escalations          0
 
 ALERT SUMMARY
 --------------------------------------------------------------------------------
-Total Alerts                   6
-Total Detections               3
-Total Correlations             3
+Total Alerts                   4
+Total Detections               4
+Total Correlations             0
 
 Alert Severity Breakdown:
-  Critical 1
-  High     1
-  Medium   3
-  Low      1
+  Critical 0
+  High     4
+  Medium   0
+  Low      0
 
 ATTACK TYPE BREAKDOWN
 --------------------------------------------------------------------------------
-BRUTE_FORCE                                  1
-CORRELATION_ATTACK                           1
-PRIVILEGE_ESCALATION                         1
-MULTIPLE_IPS                                 1
-SEQUENTIAL_FAILED_LOGINS                     1
-SEQUENTIAL_FAILED_LOGINS_USER                1
-
-TOP ATTACKING IPs
---------------------------------------------------------------------------------
-1. 45.22.11.9           - 5 failed attempts
+TEST_OTHER                                   4
 
 ================================================================================

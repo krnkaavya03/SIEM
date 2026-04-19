@@ -1,128 +1,85 @@
 ================================================================================
                     SIEM HYBRID FRAMEWORK - SECURITY ALERTS                     
-                         Generated: 2026-03-06 12:38:44                         
+                         Generated: 2026-03-31 11:34:34                         
 ================================================================================
 
 {
-  "alert_id": "ALERT-0003",
-  "type": "DETECTION",
-  "rule": "PRIVILEGE_ESCALATION",
-  "severity": "CRITICAL",
-  "timestamp": "2026-03-02 09:40:33",
-  "ip_address": "45.22.11.9",
-  "username": "john",
-  "description": "Privilege escalation attempt detected",
-  "metadata": {
-    "rule": "PRIVILEGE_ESCALATION",
-    "severity": "CRITICAL",
-    "ip_address": "45.22.11.9",
-    "username": "john",
-    "timestamp": "2026-03-02 09:40:33",
-    "description": "Privilege escalation attempt detected"
-  }
-}
---------------------------------------------------------------------------------
-{
   "alert_id": "ALERT-0001",
   "type": "DETECTION",
-  "rule": "BRUTE_FORCE",
+  "rule": "TEST_OTHER",
   "severity": "HIGH",
-  "timestamp": "2026-03-02 09:02:22",
-  "ip_address": "45.22.11.9",
-  "username": "john",
-  "description": "5 failed login attempts detected from 45.22.11.9",
-  "metadata": {
-    "rule": "BRUTE_FORCE",
-    "severity": "HIGH",
-    "ip_address": "45.22.11.9",
-    "username": "john",
-    "timestamp": "2026-03-02 09:02:22",
-    "description": "5 failed login attempts detected from 45.22.11.9",
-    "event_count": 5
-  }
-}
---------------------------------------------------------------------------------
-{
-  "alert_id": "ALERT-0004",
-  "type": "CORRELATION",
-  "rule": "MULTIPLE_IPS",
-  "severity": "MEDIUM",
-  "timestamp": "2026-03-06 12:38:44",
+  "timestamp": "2026-03-31 11:34:33",
   "ip_address": "N/A",
-  "username": "john",
-  "description": "User john accessed from 3 different IPs. Possible account compromise.",
-  "metadata": {
-    "correlation_type": "MULTIPLE_IPS",
-    "severity": "MEDIUM",
-    "username": "john",
-    "ip_addresses": [
-      "192.168.10.25",
-      "N/A",
-      "45.22.11.9"
-    ],
-    "ip_count": 3,
-    "description": "User john accessed from 3 different IPs. Possible account compromise."
-  }
-}
---------------------------------------------------------------------------------
-{
-  "alert_id": "ALERT-0005",
-  "type": "CORRELATION",
-  "rule": "SEQUENTIAL_FAILED_LOGINS",
-  "severity": "MEDIUM",
-  "timestamp": "2026-03-06 12:38:44",
-  "ip_address": "45.22.11.9",
   "username": "N/A",
-  "description": "5 sequential failed logins detected from IP 45.22.11.9",
+  "description": "Test detection for OTHER",
   "metadata": {
-    "correlation_type": "SEQUENTIAL_FAILED_LOGINS",
-    "severity": "MEDIUM",
-    "ip_address": "45.22.11.9",
-    "event_count": 5,
-    "description": "5 sequential failed logins detected from IP 45.22.11.9"
-  }
-}
---------------------------------------------------------------------------------
-{
-  "alert_id": "ALERT-0006",
-  "type": "CORRELATION",
-  "rule": "SEQUENTIAL_FAILED_LOGINS_USER",
-  "severity": "MEDIUM",
-  "timestamp": "2026-03-06 12:38:44",
-  "ip_address": "N/A",
-  "username": "john",
-  "description": "5 sequential failed login attempts detected for user john",
-  "metadata": {
-    "correlation_type": "SEQUENTIAL_FAILED_LOGINS_USER",
-    "severity": "MEDIUM",
-    "username": "john",
-    "event_count": 5,
-    "description": "5 sequential failed login attempts detected for user john"
+    "rule": "TEST_OTHER",
+    "severity": "HIGH",
+    "ip_address": "N/A",
+    "username": "N/A",
+    "timestamp": "2026-03-31 11:34:33",
+    "description": "Test detection for OTHER"
   }
 }
 --------------------------------------------------------------------------------
 {
   "alert_id": "ALERT-0002",
   "type": "DETECTION",
-  "rule": "CORRELATION_ATTACK",
-  "severity": "LOW",
-  "timestamp": "2026-03-02 09:10:15",
-  "ip_address": "45.22.11.9",
-  "username": "john",
-  "description": "Successful login after 5 failed attempts",
+  "rule": "TEST_OTHER",
+  "severity": "HIGH",
+  "timestamp": "2026-03-31 11:34:33",
+  "ip_address": "N/A",
+  "username": "N/A",
+  "description": "Test detection for OTHER",
   "metadata": {
-    "rule": "CORRELATION_ATTACK",
-    "severity": "LOW",
-    "ip_address": "45.22.11.9",
-    "username": "john",
-    "timestamp": "2026-03-02 09:10:15",
-    "description": "Successful login after 5 failed attempts",
-    "failed_attempts": 5,
-    "successful_logins": 1
+    "rule": "TEST_OTHER",
+    "severity": "HIGH",
+    "ip_address": "N/A",
+    "username": "N/A",
+    "timestamp": "2026-03-31 11:34:33",
+    "description": "Test detection for OTHER"
+  }
+}
+--------------------------------------------------------------------------------
+{
+  "alert_id": "ALERT-0003",
+  "type": "DETECTION",
+  "rule": "TEST_OTHER",
+  "severity": "HIGH",
+  "timestamp": "2026-03-31 11:34:33",
+  "ip_address": "N/A",
+  "username": "N/A",
+  "description": "Test detection for OTHER",
+  "metadata": {
+    "rule": "TEST_OTHER",
+    "severity": "HIGH",
+    "ip_address": "N/A",
+    "username": "N/A",
+    "timestamp": "2026-03-31 11:34:33",
+    "description": "Test detection for OTHER"
+  }
+}
+--------------------------------------------------------------------------------
+{
+  "alert_id": "ALERT-0004",
+  "type": "DETECTION",
+  "rule": "TEST_OTHER",
+  "severity": "HIGH",
+  "timestamp": "2026-03-31 11:34:33",
+  "ip_address": "N/A",
+  "username": "N/A",
+  "description": "Test detection for OTHER",
+  "metadata": {
+    "rule": "TEST_OTHER",
+    "severity": "HIGH",
+    "ip_address": "N/A",
+    "username": "N/A",
+    "timestamp": "2026-03-31 11:34:33",
+    "description": "Test detection for OTHER"
   }
 }
 --------------------------------------------------------------------------------
 ================================================================================
-Total Alerts: 6
-Critical: 1 | High: 1 | Medium: 3 | Low: 1
+Total Alerts: 4
+Critical: 0 | High: 4 | Medium: 0 | Low: 0
 ================================================================================
