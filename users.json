@@ -49,7 +49,7 @@
     "locked_until": 0,
     "created_at": "2026-03-31T06:25:29.733746",
     "two_fa_enabled": true,
-    "last_login": "2026-04-20T23:27:48.316074"
+    "last_login": "2026-04-21T00:56:07.558836"
   },
   "Kiwiii": {
     "password": "cbbccce7f1f51d8d089248349b9bc34f44c3023fa6a88d32324ecb0cbceee780",
@@ -99,5 +99,25 @@
     "created_at": "2026-04-20T18:51:46.068727",
     "two_fa_enabled": true,
     "last_login": "2026-04-20T22:55:22.804627"
+  },
+  "ria": {
+    "password": "2ac035518b3402c015fc4fb5528978d310026328383e0cf88b6c15107661ad4d",
+    "role": "Admin",
+    "email": "krnkaavya03@gmail.com",
+    "failed_attempts": 0,
+    "locked_until": 0,
+    "created_at": "2026-04-21T00:48:21.334109",
+    "two_fa_enabled": false,
+    "last_login": "2026-04-21T00:48:25.337421"
+  },
+  "Sia": {
+    "password": "9f2f3c1148e78137ab417da90cccd998b9312bfc1a2c9dcc3a1ccdcd4bb6c55d",
+    "role": "Admin",
+    "email": "krnkaavya03@gmail.com",
+    "failed_attempts": 0,
+    "locked_until": 0,
+    "created_at": "2026-04-21T01:13:15.203931",
+    "two_fa_enabled": false,
+    "last_login": "2026-04-21T01:13:22.031074"
   }
 }

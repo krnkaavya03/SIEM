@@ -1,6 +1,6 @@
 {
   "N/A": {
-    "timestamp": 1775483540.918246,
+    "timestamp": 1776709585.117944,
     "data": {}
   },
   "10.0.0.101": {
@@ -49,6 +49,22 @@
       "virustotal_suspicious": 0,
       "virustotal_country": "",
       "virustotal_as_owner": ""
+    }
+  },
+  "185.220.101.1": {
+    "timestamp": 1776709580.808191,
+    "data": {
+      "abuseipdb_score": 100,
+      "abuseipdb_category": [],
+      "abuseipdb_country": "DE",
+      "abuseipdb_isp": "Artikel10 e.V.",
+      "abuseipdb_usage_type": "Fixed Line ISP",
+      "virustotal_reputation": -22,
+      "virustotal_harmless": 47,
+      "virustotal_malicious": 15,
+      "virustotal_suspicious": 3,
+      "virustotal_country": "DE",
+      "virustotal_as_owner": "Stiftung Erneuerbare Freiheit"
     }
   }
 }

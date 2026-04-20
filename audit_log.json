@@ -2931,5 +2931,96 @@
     "action": "CONFIG_UPDATED",
     "details": "Email notifications",
     "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-20T23:55:39.603046",
+    "username": "Kiwi",
+    "action": "LOGIN_SUCCESS",
+    "details": "Successful login",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-20T23:55:56.748429",
+    "username": "Kiwi",
+    "action": "2FA_SUCCESS",
+    "details": "",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-20T23:56:33.830863",
+    "username": "Kiwi",
+    "action": "ANALYSIS_RUN",
+    "details": "Mode: \ud83e\uddea Test, Alerts: 5",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-20T23:57:48.708135",
+    "username": "Kiwi",
+    "action": "CONFIG_UPDATED",
+    "details": "Email notifications",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:37:27.105311",
+    "username": "Kiwi",
+    "action": "LOGIN_SUCCESS",
+    "details": "Successful login",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:37:48.486264",
+    "username": "Kiwi",
+    "action": "2FA_SUCCESS",
+    "details": "",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:48:21.340777",
+    "username": "ria",
+    "action": "USER_REGISTERED",
+    "details": "New Admin",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:48:25.373778",
+    "username": "ria",
+    "action": "LOGIN_SUCCESS",
+    "details": "Successful login",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:48:54.843328",
+    "username": "ria",
+    "action": "ANALYSIS_RUN",
+    "details": "Mode: \ud83e\uddea Test, Alerts: 4",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:56:07.567665",
+    "username": "Kiwi",
+    "action": "LOGIN_SUCCESS",
+    "details": "Successful login",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T00:56:27.011569",
+    "username": "Kiwi",
+    "action": "2FA_SUCCESS",
+    "details": "",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T01:13:15.216133",
+    "username": "Sia",
+    "action": "USER_REGISTERED",
+    "details": "New Admin",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "timestamp": "2026-04-21T01:13:22.051905",
+    "username": "Sia",
+    "action": "LOGIN_SUCCESS",
+    "details": "Successful login",
+    "ip_address": "127.0.0.1"
   }
 ]

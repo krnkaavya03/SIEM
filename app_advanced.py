@@ -346,37 +346,70 @@ if st.session_state.live_refresh:
 
 # ── Sidebar: analysis options ──────────────────────────────────────────────────
 st.sidebar.header("Analysis Mode")
-mode = st.sidebar.radio("Mode", ["Test", "Live (SSH)", "Syslog Listener", "Windows Event Log"])
+mode = st.sidebar.radio(
+    "Mode",
+    ["Test", "Remote Live", "Syslog Listener", "Windows Event Log"]
+)
 
-log_file_path = remote_server = remote_user = remote_pass = None
+log_file_path  = None
+remote_server  = None
+remote_user    = None
+remote_pass    = None
+remote_logpath = "/var/log/auth.log"   # safe default — avoids NameError in all branches
 
 if mode == "Test":
-    log_file_path = st.sidebar.text_input("Log file path", value="logs/logs.txt")
+    log_file_path = st.sidebar.text_input(
+        "Log file path (leave blank to use synthetic test logs)",
+        value="logs/logs.txt"
+    )
+    st.sidebar.caption("📁 Leave the path blank or point to a real log file. "
+                       "Synthetic attack logs are injected when the file is absent.")
 
-elif mode == "Live (SSH)":
-    remote_server = st.sidebar.text_input("Remote Server IP/hostname")
-    remote_user   = st.sidebar.text_input("SSH Username")
-    remote_pass   = st.sidebar.text_input("SSH Password", type="password")
-    remote_logpath = st.sidebar.text_input("Remote log path", value="/var/log/auth.log")
-    if remote_server:
-        st.sidebar.caption(f"Will connect to {remote_user}@{remote_server}")
+elif mode == "Remote Live":
+    remote_server  = st.sidebar.text_input("Remote Server IP/hostname")
+    remote_user    = st.sidebar.text_input("Username")
+    remote_pass    = st.sidebar.text_input("Password", type="password")
+    remote_logpath = st.sidebar.text_input(
+        "Remote Log Path / Event Log Name",
+        value="Security"
+    )
+    if remote_server and remote_user:
+        st.sidebar.success(
+            f"🔗 Auto Mode → {remote_user}@{remote_server} | Source: {remote_logpath}"
+        )
+    elif remote_server:
+        st.sidebar.warning("⚠️ Enter SSH username.")
+    else:
+        st.sidebar.info("Enter remote server details above.")
+    if st.session_state.role != "Admin":
+        st.sidebar.error("🔒 Admin role required for Remote Live mode.")
 
 elif mode == "Syslog Listener":
     sl_port  = st.sidebar.number_input("Listen Port", value=514, min_value=1, max_value=65535)
     sl_proto = st.sidebar.selectbox("Protocol", ["UDP", "TCP"])
-    sc = st.session_state.syslog_collector
-    if sc and sc.get_status()["running"]:
-        st.sidebar.success(f"Listener active on {sl_proto}:{int(sl_port)}")
+    sc = st.session_state.get("syslog_collector")
+    if sc and sc._running:
+        buffered = len(sc._buffer)
+        st.sidebar.success(f"✅ Listener active — {buffered} message(s) buffered")
+        if buffered == 0:
+            st.sidebar.caption("Waiting for incoming syslog messages…")
     else:
-        st.sidebar.warning("Listener not started — see Settings → System")
+        st.sidebar.warning("⚠️ Listener not started. Go to **Settings → System** to start it.")
+    st.sidebar.caption("Start the listener first, then click Run Analysis to drain buffered messages.")
 
 elif mode == "Windows Event Log":
     if st.session_state.role == "Admin":
-        remote_server = st.sidebar.text_input("Remote Server (blank = local)")
+        remote_server = st.sidebar.text_input("Remote Server IP (blank = local Windows)")
         remote_user   = st.sidebar.text_input("Remote Username")
         remote_pass   = st.sidebar.text_input("Remote Password", type="password")
+        if remote_server:
+            st.sidebar.success(f"🔗 Will collect from remote: {remote_server}")
+        else:
+            st.sidebar.info("🖥️ Local mode — collects from this machine's Security Event Log.")
+        if not _WINEVENT_OK:
+            st.sidebar.error("❌ core/windows_event_collector.py not found.")
     else:
-        st.sidebar.info("Admin required for Windows Event Log mode.")
+        st.sidebar.error("🔒 Admin role required for Windows Event Log mode.")
 
 enrich_ips  = st.sidebar.checkbox("🌐 Enrich IPs via AbuseIPDB", value=_ENRICH_OK)
 send_emails = st.sidebar.checkbox("📧 Send email alerts", value=_NOTIF_OK)
@@ -401,48 +434,92 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 # ══════════════════════════════════════════════════════════════════════════════
 if run_button:
     if not _SIEM_OK:
-        st.error("SIEMFramework not available. Cannot run analysis.")
-    elif mode == "Live (SSH)" and st.session_state.role != "Admin":
-        st.error("Only Admins can run Live SSH mode.")
+        st.error("❌ SIEMFramework not available — check that main.py is in the project root.")
+
+    elif mode == "Remote Live" and st.session_state.role != "Admin":
+        st.error("🔒 Only Admins can run Live SSH mode.")
+
+    elif mode == "Windows Event Log" and st.session_state.role != "Admin":
+        st.error("🔒 Only Admins can run Windows Event Log mode.")
+
+    elif mode == "Remote Live" and not remote_server:
+        st.error("⚠️ Enter a remote server IP/hostname before running.")
+
+    elif mode == "Remote Live" and not remote_user:
+        st.error("⚠️ Enter SSH username before running.")
+
+    elif mode == "Syslog Listener" and not _SYSLOG_OK:
+        st.error("❌ core/syslog_collector.py not found.")
+
+    elif mode == "Syslog Listener" and not st.session_state.get("syslog_collector"):
+        st.error("⚠️ Syslog listener not started. Go to **Settings → System** and start it first.")
+
+    elif mode == "Windows Event Log" and not _WINEVENT_OK:
+        st.error("❌ core/windows_event_collector.py not found.")
+
     else:
-        with st.spinner("Running SIEM analysis..."):
+        with st.spinner("Running SIEM analysis…"):
             try:
-                # ── Build and run framework ────────────────────────────────                              
-                if mode == "Windows Event Log" and _WINEVENT_OK:
+                # ── MODE: Windows Event Log ────────────────────────────────
+                if mode == "Windows Event Log":
                     wc  = WindowsEventCollector()
                     raw = (wc.collect_remote(remote_server, remote_user, remote_pass)
                            if remote_server else wc.collect())
-                    siem = SIEMFramework(test_mode=False)  # ✅ NOT test mode
-                    siem.raw_logs = raw
+                    if not raw:
+                        st.warning("⚠️ No Windows events collected. "
+                                   "Ensure pywin32 is installed (local) or SSH access is correct (remote).")
+                        st.stop()
+                    siem = SIEMFramework(test_mode=False)
+                    siem.raw_logs    = raw
+                    siem.parsed_logs = []
                     siem.run_analysis()
 
-                elif mode == "Syslog Listener" and _SYSLOG_OK:
+                # ── MODE: Syslog Listener ──────────────────────────────────
+                elif mode == "Syslog Listener":
                     sc  = st.session_state.syslog_collector
                     raw = sc.drain() if sc else []
-                    siem = SIEMFramework(test_mode=False)  # ✅ NOT test mode
-                    siem.raw_logs = raw
+                    if not raw:
+                        st.warning("⚠️ Syslog buffer is empty — no messages received yet. "
+                                   "Check that devices are forwarding syslog to this host.")
+                        st.stop()
+                    siem = SIEMFramework(test_mode=False)
+                    siem.raw_logs    = raw
+                    siem.parsed_logs = []
                     siem.run_analysis()
 
-                elif mode == "Live (SSH)":
+                # ── MODE: Live SSH ─────────────────────────────────────────
+                elif mode == "Remote Live":
                     siem = SIEMFramework(
-                        log_file_path=remote_logpath,  # ✅ Use remote path variable
+                        log_file_path=remote_logpath,
                         live_mode=True,
-                        test_mode=False,  # ✅ Real mode
+                        test_mode=False,
                         remote_server=remote_server,
                         remote_user=remote_user,
                         remote_password=remote_pass,
                     )
                     siem.run_analysis()
+                    if not siem.raw_logs:
+                        st.warning(
+                            f"⚠️ No logs collected from {remote_user}@{remote_server}:{remote_logpath}. "
+                            "Check: credentials, WinRM/SSH connectivity, server reachability, log source."
+                        )
+                        st.stop()
 
-                else:  # Test
+                # ── MODE: Test ─────────────────────────────────────────────
+                else:
+                    # Use the log file if it exists, otherwise inject synthetic logs
+                    use_file = log_file_path and os.path.exists(log_file_path)
                     siem = SIEMFramework(
-                        log_file_path=log_file_path,
-                        test_mode=True,  # ✅ Only Test mode for "Test"
+                        log_file_path=log_file_path if use_file else None,
+                        test_mode=(not use_file),
                     )
                     siem.run_analysis()
+                    if not use_file:
+                        st.info("📁 Log file not found — running with synthetic test logs.")
 
                 alerts = siem.alerts or []
                 stats  = siem.statistics or {}
+
 
                 # ── IP Enrichment ──────────────────────────────────────────
                 if enrich_ips and _ENRICH_OK and alerts:
@@ -467,7 +544,7 @@ if run_button:
                 # ── Audit ──────────────────────────────────────────────────
                 mode_labels = {
                     "Test":               "🧪 Test",
-                    "Live (SSH)":         "🔴 Live SSH",
+                    "Remote Live":        "🔴 Remote Live",
                     "Syslog Listener":    "📡 Syslog",
                     "Windows Event Log":  "🪟 WinEvent",
                 }
@@ -645,49 +722,92 @@ with tab2:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 # TAB 3  —  ANALYTICS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
     st.header("📊 Security Analytics")
-    
-    # Use dashboard_data if available, else fall back to alert history
-    df = st.session_state.get('dashboard_data', pd.DataFrame())
     history = load_json(ALERT_HISTORY_DB, [])
+    last_stats = st.session_state.get("last_stats", {})
+    alerts_session = st.session_state.get("last_alerts", [])
 
-    if not df.empty:
-        st.subheader("Log File Overview")
-        st.dataframe(df.head(10))
-
-        # Example: Log Type Distribution (if 'type' column exists)
-        if 'type' in df.columns:
-            type_count = df['type'].value_counts().reset_index()
-            type_count.columns = ['Type', 'Count']
-            fig1 = px.bar(type_count, x='Type', y='Count', title="Log Type Distribution", color='Count', color_continuous_scale='Blues')
-            st.plotly_chart(fig1, use_container_width=True)
-
-        # Example: Logs Over Time (if 'timestamp' column exists)
-        if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-            df_sorted = df.dropna(subset=['timestamp']).sort_values('timestamp')
-            fig2 = px.line(df_sorted, x='timestamp', y='type' if 'type' in df_sorted.columns else df_sorted.columns[0],
-                           title="Logs Over Time")
-            st.plotly_chart(fig2, use_container_width=True)
-
-    elif history:
-        st.info("No uploaded log file, using alert history for analytics.")
-
-        df_hist = pd.DataFrame(history)
-        if 'severity' in df_hist.columns:
-            sev_count = df_hist['severity'].value_counts().reset_index()
-            sev_count.columns = ['Severity', 'Count']
-            fig3 = px.pie(sev_count, names='Severity', values='Count', title="Severity Distribution", hole=0.3)
-            st.plotly_chart(fig3, use_container_width=True)
-
+    if not history and not alerts_session:
+        st.info("Run an analysis to see analytics.")
     else:
-        st.info("Run an analysis or upload a log file to see analytics.")
+        # ── Row 1: pipeline stats from last run ──────────────────────────────
+        if last_stats:
+            gs = last_stats.get("general_stats", {})
+            sev_s = last_stats.get("alert_severity", {})
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
+            m1.metric("Events",           gs.get("total_events", 0))
+            m2.metric("Unique IPs",        gs.get("unique_ips", 0))
+            m3.metric("Unique Users",      gs.get("unique_users", 0))
+            m4.metric("Failed Logins",     gs.get("failed_logins", 0))
+            m5.metric("Priv Escalations",  gs.get("privilege_escalations", 0))
+            m6.metric("File Accesses",     gs.get("file_accesses", 0))
 
+            st.divider()
 
-# ══════════════════════════════════════════════════════════════════════════════
+            # Attack breakdown from last run
+            ab = last_stats.get("attack_breakdown", {})
+            if ab:
+                ab_df = pd.DataFrame(list(ab.items()), columns=["Rule", "Count"]).sort_values("Count", ascending=False)
+                fig_ab = px.bar(ab_df, x="Rule", y="Count", title="Attack Type Breakdown (Last Run)",
+                                color="Count", color_continuous_scale="Reds")
+                st.plotly_chart(fig_ab, use_container_width=True)
+
+            # Top attackers
+            ta = last_stats.get("top_attackers", [])
+            if ta:
+                ta_df = pd.DataFrame(ta)
+                fig_ta = px.bar(ta_df, x="ip", y="failed_attempts",
+                                title="Top Attacking IPs (Last Run)",
+                                color="failed_attempts", color_continuous_scale="Oranges")
+                st.plotly_chart(fig_ta, use_container_width=True)
+
+        st.divider()
+
+        # ── Row 2: charts from full alert history ─────────────────────────────
+        if history:
+            df_hist = pd.DataFrame(history)
+
+            r1, r2 = st.columns(2)
+            with r1:
+                if "severity" in df_hist.columns:
+                    sev_c = df_hist["severity"].value_counts().reset_index()
+                    sev_c.columns = ["Severity", "Count"]
+                    fig_sev = px.pie(sev_c, names="Severity", values="Count", hole=0.4,
+                                     color="Severity", color_discrete_map=SEVERITY_COLORS,
+                                     title="All-Time Severity Distribution")
+                    st.plotly_chart(fig_sev, use_container_width=True)
+
+            with r2:
+                if "rule" in df_hist.columns:
+                    rules_c = df_hist["rule"].value_counts().head(10).reset_index()
+                    rules_c.columns = ["Rule", "Count"]
+                    fig_rules = px.bar(rules_c, x="Count", y="Rule", orientation="h",
+                                       title="Top 10 Alert Rules (All Time)",
+                                       color="Count", color_continuous_scale="Reds")
+                    st.plotly_chart(fig_rules, use_container_width=True)
+
+            if "timestamp" in df_hist.columns:
+                df_hist["ts"] = pd.to_datetime(df_hist["timestamp"], errors="coerce")
+                df_ts = df_hist.dropna(subset=["ts"]).sort_values("ts")
+                if not df_ts.empty:
+                    fig_tl = px.scatter(df_ts, x="ts", y="severity", color="severity",
+                                        color_discrete_map=SEVERITY_COLORS,
+                                        hover_data=["rule", "username", "ip_address"],
+                                        title="Alert Timeline (All History)")
+                    st.plotly_chart(fig_tl, use_container_width=True)
+
+            if "username" in df_hist.columns:
+                user_c = df_hist["username"].value_counts().head(10).reset_index()
+                user_c.columns = ["Username", "Count"]
+                fig_u = px.bar(user_c, x="Username", y="Count",
+                               title="Most Alerted Users (All Time)",
+                               color="Count", color_continuous_scale="Blues")
+                st.plotly_chart(fig_u, use_container_width=True)
+
 # TAB 4  —  RISK & ANOMALIES
 # ══════════════════════════════════════════════════════════════════════════════
 with tab4:

@@ -1,14 +1,14 @@
 ================================================================================
                     SIEM HYBRID FRAMEWORK - SECURITY ALERTS                     
-                         Generated: 2026-04-20 23:19:22                         
+                         Generated: 2026-04-21 00:48:40                         
 ================================================================================
 
 {
-  "alert_id": "ALERT-0001",
+  "alert_id": "ALERT-720905-0000",
   "type": "DETECTION",
   "rule": "TEST_LOGIN_FAILED",
   "severity": "HIGH",
-  "timestamp": "2026-04-20 23:19:22",
+  "timestamp": "2026-04-21 00:48:40",
   "ip_address": "10.0.0.101",
   "username": "attacker1",
   "description": "Test detection for LOGIN_FAILED",
@@ -17,17 +17,17 @@
     "severity": "HIGH",
     "ip_address": "10.0.0.101",
     "username": "attacker1",
-    "timestamp": "2026-04-20 23:19:22",
+    "timestamp": "2026-04-21 00:48:40",
     "description": "Test detection for LOGIN_FAILED"
   }
 }
 --------------------------------------------------------------------------------
 {
-  "alert_id": "ALERT-0002",
+  "alert_id": "ALERT-720905-0001",
   "type": "DETECTION",
   "rule": "TEST_PRIVILEGE_ESCALATION",
   "severity": "HIGH",
-  "timestamp": "2026-04-20 23:19:22",
+  "timestamp": "2026-04-21 00:48:40",
   "ip_address": "10.0.0.102",
   "username": "attacker2",
   "description": "Test detection for PRIVILEGE_ESCALATION",
@@ -36,17 +36,17 @@
     "severity": "HIGH",
     "ip_address": "10.0.0.102",
     "username": "attacker2",
-    "timestamp": "2026-04-20 23:19:22",
+    "timestamp": "2026-04-21 00:48:40",
     "description": "Test detection for PRIVILEGE_ESCALATION"
   }
 }
 --------------------------------------------------------------------------------
 {
-  "alert_id": "ALERT-0003",
+  "alert_id": "ALERT-720905-0002",
   "type": "DETECTION",
   "rule": "TEST_LOGIN_SUCCESS",
   "severity": "HIGH",
-  "timestamp": "2026-04-20 23:19:22",
+  "timestamp": "2026-04-21 00:48:40",
   "ip_address": "10.0.0.101",
   "username": "attacker1",
   "description": "Test detection for LOGIN_SUCCESS",
@@ -55,17 +55,17 @@
     "severity": "HIGH",
     "ip_address": "10.0.0.101",
     "username": "attacker1",
-    "timestamp": "2026-04-20 23:19:22",
+    "timestamp": "2026-04-21 00:48:40",
     "description": "Test detection for LOGIN_SUCCESS"
   }
 }
 --------------------------------------------------------------------------------
 {
-  "alert_id": "ALERT-0004",
+  "alert_id": "ALERT-720905-0003",
   "type": "DETECTION",
   "rule": "TEST_FILE_ACCESS",
   "severity": "HIGH",
-  "timestamp": "2026-04-20 23:19:22",
+  "timestamp": "2026-04-21 00:48:40",
   "ip_address": "10.0.0.103",
   "username": "attacker3",
   "description": "Test detection for FILE_ACCESS",
@@ -74,7 +74,7 @@
     "severity": "HIGH",
     "ip_address": "10.0.0.103",
     "username": "attacker3",
-    "timestamp": "2026-04-20 23:19:22",
+    "timestamp": "2026-04-21 00:48:40",
     "description": "Test detection for FILE_ACCESS"
   }
 }
