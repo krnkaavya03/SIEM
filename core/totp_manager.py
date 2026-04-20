@@ -70,6 +70,8 @@ class TOTPManager:
 
     def __init__(self):
         self._secrets = self._load_secrets()
+        # Ensure QR directory exists on init
+        os.makedirs(QR_DIR, exist_ok=True)
 
     # ---- Public API ----
 
@@ -84,6 +86,9 @@ class TOTPManager:
         except ImportError:
             logger.error("pyotp not installed. Run: pip install pyotp")
             return None, None
+
+        # Ensure directory exists
+        os.makedirs(QR_DIR, exist_ok=True)
 
         secret = pyotp.random_base32()
         self._secrets[username] = _xor_encrypt(secret)
@@ -140,15 +145,48 @@ class TOTPManager:
     def get_qr_as_base64(self, username: str, email: str = "") -> str | None:
         """
         Return a base64-encoded PNG of the QR code for embedding in Streamlit.
-        Generates a new QR if not already saved.
+        
+        FIX: No longer recursively calls setup_user to avoid infinite loops.
         """
+        os.makedirs(QR_DIR, exist_ok=True)
         qr_path = os.path.join(QR_DIR, f"{username}.png")
+        
+        # If file doesn't exist, we need to regenerate it
         if not os.path.exists(qr_path):
-            _, qr_path = self.setup_user(username, email)
-        if not qr_path or not os.path.exists(qr_path):
-            return None
-        with open(qr_path, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+            try:
+                import pyotp
+                # Get the existing secret or create new one
+                enc = self._secrets.get(username)
+                if not enc:
+                    # No secret exists, create one
+                    secret = pyotp.random_base32()
+                    self._secrets[username] = _xor_encrypt(secret)
+                    self._save_secrets()
+                else:
+                    # Decrypt existing secret
+                    secret = _xor_decrypt(enc)
+                
+                # Generate URI and save QR
+                totp = pyotp.TOTP(secret)
+                uri = totp.provisioning_uri(
+                    name=email or username,
+                    issuer_name=ISSUER_NAME
+                )
+                qr_path = self._save_qr(username, uri)
+            except Exception as e:
+                logger.error(f"Failed to generate QR for {username}: {e}")
+                return None
+        
+        # Now try to read the file
+        if qr_path and os.path.exists(qr_path):
+            try:
+                with open(qr_path, "rb") as f:
+                    return base64.b64encode(f.read()).decode()
+            except Exception as e:
+                logger.error(f"Failed to read QR file {qr_path}: {e}")
+                return None
+        
+        return None
 
     # ---- Internal ----
 
@@ -174,7 +212,8 @@ class TOTPManager:
             try:
                 with open(TOTP_SECRETS_FILE) as f:
                     return json.load(f)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Could not load TOTP secrets: {e}")
                 pass
         return {}
 

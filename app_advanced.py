@@ -35,16 +35,14 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 # ── SIEM Framework import ──────────────────────────────
+# ── SIEM Framework import ──────────────────────────────
 _SIEM_OK = False
+
 try:
     from main import SIEMFramework
     _SIEM_OK = True
-except ImportError:
-    try:
-        from SIEM_Hybrid_Framework.main import SIEMFramework
-        _SIEM_OK = True
-    except ImportError:
-        pass
+except ImportError as e:
+    print("Import failed:", e)
 
 # ── Optional Modules (Safe Imports) ────────────────────
 _NOTIF_OK = _ENRICH_OK = _RISK_OK = _TOTP_OK = _SYSLOG_OK = _WINEVENT_OK = False
@@ -409,27 +407,27 @@ if run_button:
     else:
         with st.spinner("Running SIEM analysis..."):
             try:
-                # ── Build and run framework ────────────────────────────────
+                # ── Build and run framework ────────────────────────────────                              
                 if mode == "Windows Event Log" and _WINEVENT_OK:
                     wc  = WindowsEventCollector()
                     raw = (wc.collect_remote(remote_server, remote_user, remote_pass)
                            if remote_server else wc.collect())
-                    siem = SIEMFramework(test_mode=True)
+                    siem = SIEMFramework(test_mode=False)  # ✅ NOT test mode
                     siem.raw_logs = raw
                     siem.run_analysis()
 
                 elif mode == "Syslog Listener" and _SYSLOG_OK:
                     sc  = st.session_state.syslog_collector
                     raw = sc.drain() if sc else []
-                    siem = SIEMFramework(test_mode=True)
+                    siem = SIEMFramework(test_mode=False)  # ✅ NOT test mode
                     siem.raw_logs = raw
                     siem.run_analysis()
 
                 elif mode == "Live (SSH)":
                     siem = SIEMFramework(
-                        log_file_path=log_file_path,
+                        log_file_path=remote_logpath,  # ✅ Use remote path variable
                         live_mode=True,
-                        test_mode=False,
+                        test_mode=False,  # ✅ Real mode
                         remote_server=remote_server,
                         remote_user=remote_user,
                         remote_password=remote_pass,
@@ -439,7 +437,7 @@ if run_button:
                 else:  # Test
                     siem = SIEMFramework(
                         log_file_path=log_file_path,
-                        test_mode=True,
+                        test_mode=True,  # ✅ Only Test mode for "Test"
                     )
                     siem.run_analysis()
 
@@ -477,7 +475,7 @@ if run_button:
                           f"Mode: {mode_labels.get(mode, mode)}, Alerts: {len(alerts)}")
 
                 st.session_state.last_alerts = alerts
-                alerts = st.session_state.alerts_data
+                st.session_state.alerts_data = alerts    # ✅ FIX: Store alerts, don't overwrite
                 st.session_state.last_stats  = stats
 
                 # ── Result summary ─────────────────────────────────────────
@@ -712,10 +710,14 @@ with tab4:
             fig_anom = px.bar(anomaly_count, x='Anomaly', y='Count', title="Detected Anomalies", color='Count', color_continuous_scale='Reds')
             st.plotly_chart(fig_anom, use_container_width=True)
 
-        st.dataframe(df_alerts[['alert_id','severity','rule','risk_score','anomaly']].head(10))
+        # Show only columns that exist
+        available_cols = [col for col in ['alert_id','severity','rule','risk_score','anomaly'] if col in df_alerts.columns]
+        if available_cols:
+            st.dataframe(df_alerts[available_cols].head(10))
+        else:
+            st.dataframe(df_alerts.head(10))
     else:
         st.info("No alerts found — run an analysis to see Risk & Anomalies.")
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 5  —  AUDIT LOG
@@ -903,7 +905,7 @@ with tab6:
         else:
             st.warning("Admin access required.")
 
-    # ── 2FA ────────────────────────────────────────────────────────────────────
+    # ── 2FA ───────────────────────────────────────────────────────────
     with s3:
         st.subheader("Two-Factor Authentication")
         if not _TOTP_OK:
@@ -919,13 +921,33 @@ with tab6:
                 fa1, fa2 = st.columns(2)
                 with fa1:
                     if st.button("♻️ Regenerate"):
-                        secret, _ = totp_mgr.setup_user(cur, users.get(cur,{}).get("email",""))
-                        users[cur]["two_fa_enabled"] = True
-                        save_users(users)
-                        qr = totp_mgr.get_qr_as_base64(cur)
-                        if qr:
-                            st.image(f"data:image/png;base64,{qr}", caption="Scan with authenticator app")
-                        st.code(f"Manual key: {secret}")
+                        try:
+                            os.makedirs("qr_codes", exist_ok=True)
+                            secret, qr_path = totp_mgr.setup_user(cur, users.get(cur,{}).get("email",""))
+                            
+                            if secret and qr_path:
+                                users[cur]["two_fa_enabled"] = True
+                                save_users(users)
+                                time.sleep(0.3)
+                                
+                                if os.path.exists(qr_path):
+                                    with open(qr_path, "rb") as img_file:
+                                        img_data = img_file.read()
+                                    st.image(img_data, caption="Scan with authenticator app", width=300)
+                                else:
+                                    st.warning("⚠️ QR code file not found")
+                                
+                                st.code(f"Manual key: {secret}", language="text")
+                                st.success("✅ 2FA regenerated!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("Failed to generate secret")
+                        except Exception as e:
+                            st.error(f"❌ Regenerate failed: {str(e)}")
+                            with st.expander("Debug"):
+                                st.write(str(e))
+                
                 with fa2:
                     if st.button("🗑️ Disable 2FA"):
                         totp_mgr.remove_user(cur)
@@ -933,20 +955,41 @@ with tab6:
                         save_users(users)
                         st.success("2FA disabled.")
                         st.rerun()
+            
             else:
                 st.info("2FA is not enabled for your account.")
                 if st.button("🔐 Enable 2FA"):
-                    secret, _ = totp_mgr.setup_user(cur, users.get(cur,{}).get("email",""))
-                    if secret:
-                        users[cur]["two_fa_enabled"] = True
-                        save_users(users)
-                        qr = totp_mgr.get_qr_as_base64(cur)
-                        if qr:
-                            st.image(f"data:image/png;base64,{qr}", caption="Scan with Google Authenticator / Authy")
-                        st.code(f"Manual key: {secret}")
-                        st.success("2FA enabled! Scan the QR, log out, and log back in to test.")
-                        log_audit(cur, "2FA_ENABLED")
-
+                    try:
+                        os.makedirs("qr_codes", exist_ok=True)
+                        
+                        totp_mgr_new = TOTPManager()
+                        secret, qr_path = totp_mgr_new.setup_user(cur, users.get(cur,{}).get("email",""))
+                        
+                        if secret and qr_path:
+                            users[cur]["two_fa_enabled"] = True
+                            save_users(users)
+                            time.sleep(0.3)
+                            
+                            if os.path.exists(qr_path):
+                                with open(qr_path, "rb") as img_file:
+                                    img_data = img_file.read()
+                                st.image(img_data, caption="Scan with Google Authenticator / Authy", width=300)
+                            else:
+                                st.warning("⚠️ QR code file could not be generated")
+                            
+                            st.code(f"Manual key: {secret}", language="text")
+                            st.success("✅ 2FA enabled! Scan the QR, log out, and log back in to test.")
+                            log_audit(cur, "2FA_ENABLED")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to generate TOTP secret. Ensure pyotp is installed.")
+                    except Exception as e:
+                        st.error(f"❌ 2FA setup failed: {str(e)}")
+                        with st.expander("🔧 Debug Info"):
+                            st.write(f"Error: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
     # ── System ─────────────────────────────────────────────────────────────────
     with s4:
         st.subheader("Module Status")

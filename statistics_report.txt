@@ -1,17 +1,17 @@
 ================================================================================
                   SIEM HYBRID FRAMEWORK - SECURITY STATISTICS                   
-                         Generated: 2026-03-31 11:34:33                         
+                         Generated: 2026-04-20 23:19:22                         
 ================================================================================
 
 GENERAL STATISTICS
 --------------------------------------------------------------------------------
 Total Events                   4
-Unique Ips                     1
-Unique Users                   1
-Failed Logins                  0
-Successful Logins              0
-File Accesses                  0
-Privilege Escalations          0
+Unique Ips                     3
+Unique Users                   3
+Failed Logins                  1
+Successful Logins              1
+File Accesses                  1
+Privilege Escalations          1
 
 ALERT SUMMARY
 --------------------------------------------------------------------------------
@@ -27,6 +27,13 @@ Alert Severity Breakdown:
 
 ATTACK TYPE BREAKDOWN
 --------------------------------------------------------------------------------
-TEST_OTHER                                   4
+TEST_LOGIN_FAILED                            1
+TEST_PRIVILEGE_ESCALATION                    1
+TEST_LOGIN_SUCCESS                           1
+TEST_FILE_ACCESS                             1
+
+TOP ATTACKING IPs
+--------------------------------------------------------------------------------
+1. 10.0.0.101           - 1 failed attempts
 
 ================================================================================

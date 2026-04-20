@@ -6,9 +6,9 @@ Contains detection rules, thresholds, and system settings
 # -----------------------------
 # System Configuration
 # -----------------------------
-LOG_FILE_PATH = r"C:\Users\krnka\OneDrive\Documents\SIEM\logs\logs.txt"
-ALERT_OUTPUT_FILE = r"C:\Users\krnka\OneDrive\Documents\SIEM\alerts.txt"
-STATISTICS_OUTPUT_FILE = r"C:\Users\krnka\OneDrive\Documents\SIEM\statistics_report.txt"
+LOG_FILE_PATH = r"C:\Users\krnka\OneDrive\Documents\SIEM LOG ANALYZER\logs\logs.txt"
+ALERT_OUTPUT_FILE = r"C:\Users\krnka\OneDrive\Documents\SIEM LOG ANALYZER\alerts.txt"
+STATISTICS_OUTPUT_FILE = r"C:\Users\krnka\OneDrive\Documents\SIEM LOG ANALYZER\statistics_report.txt"
 
 # Supported Log Formats
 LOG_FORMATS_SUPPORTED = ["CUSTOM", "APACHE", "NGINX", "SYSLOG", "WINDOWS_EVENT"]

@@ -1,81 +1,81 @@
 ================================================================================
                     SIEM HYBRID FRAMEWORK - SECURITY ALERTS                     
-                         Generated: 2026-03-31 11:34:34                         
+                         Generated: 2026-04-20 23:19:22                         
 ================================================================================
 
 {
   "alert_id": "ALERT-0001",
   "type": "DETECTION",
-  "rule": "TEST_OTHER",
+  "rule": "TEST_LOGIN_FAILED",
   "severity": "HIGH",
-  "timestamp": "2026-03-31 11:34:33",
-  "ip_address": "N/A",
-  "username": "N/A",
-  "description": "Test detection for OTHER",
+  "timestamp": "2026-04-20 23:19:22",
+  "ip_address": "10.0.0.101",
+  "username": "attacker1",
+  "description": "Test detection for LOGIN_FAILED",
   "metadata": {
-    "rule": "TEST_OTHER",
+    "rule": "TEST_LOGIN_FAILED",
     "severity": "HIGH",
-    "ip_address": "N/A",
-    "username": "N/A",
-    "timestamp": "2026-03-31 11:34:33",
-    "description": "Test detection for OTHER"
+    "ip_address": "10.0.0.101",
+    "username": "attacker1",
+    "timestamp": "2026-04-20 23:19:22",
+    "description": "Test detection for LOGIN_FAILED"
   }
 }
 --------------------------------------------------------------------------------
 {
   "alert_id": "ALERT-0002",
   "type": "DETECTION",
-  "rule": "TEST_OTHER",
+  "rule": "TEST_PRIVILEGE_ESCALATION",
   "severity": "HIGH",
-  "timestamp": "2026-03-31 11:34:33",
-  "ip_address": "N/A",
-  "username": "N/A",
-  "description": "Test detection for OTHER",
+  "timestamp": "2026-04-20 23:19:22",
+  "ip_address": "10.0.0.102",
+  "username": "attacker2",
+  "description": "Test detection for PRIVILEGE_ESCALATION",
   "metadata": {
-    "rule": "TEST_OTHER",
+    "rule": "TEST_PRIVILEGE_ESCALATION",
     "severity": "HIGH",
-    "ip_address": "N/A",
-    "username": "N/A",
-    "timestamp": "2026-03-31 11:34:33",
-    "description": "Test detection for OTHER"
+    "ip_address": "10.0.0.102",
+    "username": "attacker2",
+    "timestamp": "2026-04-20 23:19:22",
+    "description": "Test detection for PRIVILEGE_ESCALATION"
   }
 }
 --------------------------------------------------------------------------------
 {
   "alert_id": "ALERT-0003",
   "type": "DETECTION",
-  "rule": "TEST_OTHER",
+  "rule": "TEST_LOGIN_SUCCESS",
   "severity": "HIGH",
-  "timestamp": "2026-03-31 11:34:33",
-  "ip_address": "N/A",
-  "username": "N/A",
-  "description": "Test detection for OTHER",
+  "timestamp": "2026-04-20 23:19:22",
+  "ip_address": "10.0.0.101",
+  "username": "attacker1",
+  "description": "Test detection for LOGIN_SUCCESS",
   "metadata": {
-    "rule": "TEST_OTHER",
+    "rule": "TEST_LOGIN_SUCCESS",
     "severity": "HIGH",
-    "ip_address": "N/A",
-    "username": "N/A",
-    "timestamp": "2026-03-31 11:34:33",
-    "description": "Test detection for OTHER"
+    "ip_address": "10.0.0.101",
+    "username": "attacker1",
+    "timestamp": "2026-04-20 23:19:22",
+    "description": "Test detection for LOGIN_SUCCESS"
   }
 }
 --------------------------------------------------------------------------------
 {
   "alert_id": "ALERT-0004",
   "type": "DETECTION",
-  "rule": "TEST_OTHER",
+  "rule": "TEST_FILE_ACCESS",
   "severity": "HIGH",
-  "timestamp": "2026-03-31 11:34:33",
-  "ip_address": "N/A",
-  "username": "N/A",
-  "description": "Test detection for OTHER",
+  "timestamp": "2026-04-20 23:19:22",
+  "ip_address": "10.0.0.103",
+  "username": "attacker3",
+  "description": "Test detection for FILE_ACCESS",
   "metadata": {
-    "rule": "TEST_OTHER",
+    "rule": "TEST_FILE_ACCESS",
     "severity": "HIGH",
-    "ip_address": "N/A",
-    "username": "N/A",
-    "timestamp": "2026-03-31 11:34:33",
-    "description": "Test detection for OTHER"
+    "ip_address": "10.0.0.103",
+    "username": "attacker3",
+    "timestamp": "2026-04-20 23:19:22",
+    "description": "Test detection for FILE_ACCESS"
   }
 }
 --------------------------------------------------------------------------------
