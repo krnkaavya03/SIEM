@@ -1,0 +1,146 @@
+[
+  {
+    "alert_id": "ALERT-007493-0002",
+    "type": "DETECTION",
+    "rule": "PRIVILEGE_ESCALATION",
+    "severity": "CRITICAL",
+    "timestamp": "2026-03-01 02:00:10",
+    "ip_address": "185.220.101.1",
+    "username": "unknown",
+    "description": "Privilege escalation attempt detected",
+    "metadata": {
+      "rule": "PRIVILEGE_ESCALATION",
+      "severity": "CRITICAL",
+      "ip_address": "185.220.101.1",
+      "username": "unknown",
+      "timestamp": "2026-03-01 02:00:10",
+      "description": "Privilege escalation attempt detected"
+    },
+    "ip_enrichment": {
+      "abuseipdb_score": 100,
+      "abuseipdb_category": [],
+      "abuseipdb_country": "DE",
+      "abuseipdb_isp": "Artikel10 e.V.",
+      "abuseipdb_usage_type": "Fixed Line ISP",
+      "virustotal_reputation": -22,
+      "virustotal_harmless": 47,
+      "virustotal_malicious": 15,
+      "virustotal_suspicious": 3,
+      "virustotal_country": "DE",
+      "virustotal_as_owner": "Stiftung Erneuerbare Freiheit"
+    }
+  },
+  {
+    "alert_id": "ALERT-007492-0000",
+    "type": "DETECTION",
+    "rule": "BRUTE_FORCE",
+    "severity": "HIGH",
+    "timestamp": "2026-03-01 01:10:11",
+    "ip_address": "185.220.101.1",
+    "username": "unknown",
+    "description": "5 failed login attempts detected from 185.220.101.1",
+    "metadata": {
+      "rule": "BRUTE_FORCE",
+      "severity": "HIGH",
+      "ip_address": "185.220.101.1",
+      "username": "unknown",
+      "timestamp": "2026-03-01 01:10:11",
+      "description": "5 failed login attempts detected from 185.220.101.1",
+      "event_count": 5
+    },
+    "ip_enrichment": {
+      "abuseipdb_score": 100,
+      "abuseipdb_category": [],
+      "abuseipdb_country": "DE",
+      "abuseipdb_isp": "Artikel10 e.V.",
+      "abuseipdb_usage_type": "Fixed Line ISP",
+      "virustotal_reputation": -22,
+      "virustotal_harmless": 47,
+      "virustotal_malicious": 15,
+      "virustotal_suspicious": 3,
+      "virustotal_country": "DE",
+      "virustotal_as_owner": "Stiftung Erneuerbare Freiheit"
+    }
+  },
+  {
+    "alert_id": "ALERT-007493-0003",
+    "type": "CORRELATION",
+    "rule": "SEQUENTIAL_FAILED_LOGINS",
+    "severity": "MEDIUM",
+    "timestamp": "2026-04-21 09:30:07",
+    "ip_address": "185.220.101.1",
+    "username": "N/A",
+    "description": "5 sequential failed logins detected from IP 185.220.101.1",
+    "metadata": {
+      "correlation_type": "SEQUENTIAL_FAILED_LOGINS",
+      "severity": "MEDIUM",
+      "ip_address": "185.220.101.1",
+      "event_count": 5,
+      "description": "5 sequential failed logins detected from IP 185.220.101.1"
+    },
+    "ip_enrichment": {
+      "abuseipdb_score": 100,
+      "abuseipdb_category": [],
+      "abuseipdb_country": "DE",
+      "abuseipdb_isp": "Artikel10 e.V.",
+      "abuseipdb_usage_type": "Fixed Line ISP",
+      "virustotal_reputation": -22,
+      "virustotal_harmless": 47,
+      "virustotal_malicious": 15,
+      "virustotal_suspicious": 3,
+      "virustotal_country": "DE",
+      "virustotal_as_owner": "Stiftung Erneuerbare Freiheit"
+    }
+  },
+  {
+    "alert_id": "ALERT-007493-0004",
+    "type": "CORRELATION",
+    "rule": "SEQUENTIAL_FAILED_LOGINS_USER",
+    "severity": "MEDIUM",
+    "timestamp": "2026-04-21 09:30:07",
+    "ip_address": "N/A",
+    "username": "unknown",
+    "description": "5 sequential failed login attempts detected for user unknown",
+    "metadata": {
+      "correlation_type": "SEQUENTIAL_FAILED_LOGINS_USER",
+      "severity": "MEDIUM",
+      "username": "unknown",
+      "event_count": 5,
+      "description": "5 sequential failed login attempts detected for user unknown"
+    },
+    "ip_enrichment": {}
+  },
+  {
+    "alert_id": "ALERT-007493-0001",
+    "type": "DETECTION",
+    "rule": "CORRELATION_ATTACK",
+    "severity": "LOW",
+    "timestamp": "2026-03-01 01:12:33",
+    "ip_address": "185.220.101.1",
+    "username": "unknown",
+    "description": "Successful login after 5 failed attempts",
+    "metadata": {
+      "rule": "CORRELATION_ATTACK",
+      "severity": "LOW",
+      "ip_address": "185.220.101.1",
+      "username": "unknown",
+      "timestamp": "2026-03-01 01:12:33",
+      "description": "Successful login after 5 failed attempts",
+      "failed_attempts": 5,
+      "successful_logins": 1
+    },
+    "ip_enrichment": {
+      "abuseipdb_score": 100,
+      "abuseipdb_category": [],
+      "abuseipdb_country": "DE",
+      "abuseipdb_isp": "Artikel10 e.V.",
+      "abuseipdb_usage_type": "Fixed Line ISP",
+      "virustotal_reputation": -22,
+      "virustotal_harmless": 47,
+      "virustotal_malicious": 15,
+      "virustotal_suspicious": 3,
+      "virustotal_country": "DE",
+      "virustotal_as_owner": "Stiftung Erneuerbare Freiheit"
+    }
+  }
+]

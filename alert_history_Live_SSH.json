@@ -1,0 +1,49 @@
+[
+  {
+    "alert_id": "ALERT-719371-0000",
+    "type": "DETECTION",
+    "rule": "PRIVILEGE_ESCALATION",
+    "severity": "CRITICAL",
+    "timestamp": "2026-04-21 09:25:09",
+    "ip_address": "N/A",
+    "username": "siemuser",
+    "description": "Privilege escalation attempt detected",
+    "metadata": {
+      "rule": "PRIVILEGE_ESCALATION",
+      "severity": "CRITICAL",
+      "ip_address": "N/A",
+      "username": "siemuser",
+      "timestamp": "2026-04-21 09:25:09",
+      "description": "Privilege escalation attempt detected"
+    },
+    "ip_enrichment": {}
+  },
+  {
+    "alert_id": "ALERT-719371-0001",
+    "type": "CORRELATION",
+    "rule": "SHARED_IP",
+    "severity": "MEDIUM",
+    "timestamp": "2026-04-21 09:25:19",
+    "ip_address": "N/A",
+    "username": "N/A",
+    "description": "Multiple users (8) accessing from single IP: N/A. Possible credential sharing or compromised proxy.",
+    "metadata": {
+      "correlation_type": "SHARED_IP",
+      "severity": "MEDIUM",
+      "ip_address": "N/A",
+      "users": [
+        "siemuser",
+        "Administrators",
+        "N/A",
+        "SYSTEM",
+        "Guest",
+        "Administrator",
+        "DefaultAccount",
+        "krnka"
+      ],
+      "user_count": 8,
+      "description": "Multiple users (8) accessing from single IP: N/A. Possible credential sharing or compromised proxy."
+    },
+    "ip_enrichment": {}
+  }
+]

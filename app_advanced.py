@@ -78,12 +78,6 @@ try:
 except Exception:
     pass
 
-try:
-    from core.windows_event_collector import WindowsEventCollector
-    _WINEVENT_OK = True
-except Exception:
-    pass
-
 # ──────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
@@ -98,7 +92,6 @@ st.set_page_config(
 # CONSTANTS
 # ──────────────────────────────────────────────────────────────────────────────
 USER_DB          = "users.json"
-ALERT_HISTORY_DB = "alert_history.json"
 NOTIFICATION_CFG = "notification_config.json"
 AUDIT_LOG_FILE   = "audit_log.json"
 MAX_ATTEMPTS     = int(os.getenv("MAX_LOGIN_ATTEMPTS", 3))
@@ -111,6 +104,7 @@ SEVERITY_COLORS = {
     "LOW":      "#2ecc71",
 }
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # THEME
 # ──────────────────────────────────────────────────────────────────────────────
@@ -121,8 +115,10 @@ def apply_theme(theme):
         "Matrix":     dict(grad="linear-gradient(135deg,#000000,#0a0e27)",          card="rgba(10,10,10,0.9)",   accent="#00FF41"),
         "Light Pro":  dict(grad="linear-gradient(135deg,#f5f7fa,#c3cfe2)",          card="rgba(255,255,255,0.92)", accent="#4299e1"),
     }.get(theme, {})
+
     if not p:
         return
+
     st.markdown(f"""<style>
     .stApp{{background:{p['grad']};}}
     section[data-testid="stSidebar"]{{background:{p['card']};backdrop-filter:blur(10px);}}
@@ -151,6 +147,7 @@ def load_json(path, default=None):
     except Exception:
         return default
 
+
 def save_json(path, data):
     try:
         with open(path, "w") as f:
@@ -158,112 +155,220 @@ def save_json(path, data):
     except Exception as e:
         st.error(f"Save failed: {e}")
 
+
 def load_users() -> dict:
     d = load_json(USER_DB, {})
     return d if isinstance(d, dict) else {}
 
+
 def save_users(u: dict):
     save_json(USER_DB, u)
+
 
 def hash_pw(pw: str) -> str:
     return hashlib.sha256(pw.encode()).hexdigest()
 
+
 def is_strong(pw: str) -> bool:
-    return (len(pw) >= 8
-            and re.search(r"[A-Z]", pw)
-            and re.search(r"[0-9]", pw)
-            and re.search(r'[!@#$%^&*(),.?":{}|<>]', pw))
+    return (
+        len(pw) >= 8
+        and re.search(r"[A-Z]", pw)
+        and re.search(r"[0-9]", pw)
+        and re.search(r'[!@#$%^&*(),.?":{}|<>]', pw)
+    )
+
 
 def log_audit(username: str, action: str, details: str = ""):
     data = load_json(AUDIT_LOG_FILE, [])
     if not isinstance(data, list):
         data = []
+
     data.append({
-        "timestamp":  datetime.now().isoformat(),
-        "username":   username,
-        "action":     action,
-        "details":    str(details),
+        "timestamp": datetime.now().isoformat(),
+        "username": username,
+        "action": action,
+        "details": str(details),
         "ip_address": "127.0.0.1",
     })
     save_json(AUDIT_LOG_FILE, data)
 
+# ──────────────────────────────────────────────────────────────────────────────
+# ALERT HISTORY STORAGE (FIX)
+# ──────────────────────────────────────────────────────────────────────────────
 def save_alert_history(new_alerts: list):
+    global ALERT_HISTORY_DB
+
     history = load_json(ALERT_HISTORY_DB, [])
+
     if not isinstance(history, list):
         history = []
-    existing = {a.get("alert_id") for a in history}
-    added = [a for a in new_alerts if a.get("alert_id") not in existing]
-    history.extend(added)
-    save_json(ALERT_HISTORY_DB, history)
-    return added
 
+    existing_ids = {a.get("alert_id") for a in history if isinstance(a, dict)}
+
+    added = [
+        a for a in new_alerts
+        if isinstance(a, dict) and a.get("alert_id") not in existing_ids
+    ]
+
+    history.extend(added)
+
+    save_json(ALERT_HISTORY_DB, history)
+
+    return added
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AUTH
 # ──────────────────────────────────────────────────────────────────────────────
 def authenticate(username: str, password: str) -> str:
     users = load_users()
+
     if username not in users:
         return "no_user"
+
     u = users[username]
+
     if u.get("locked_until", 0) > time.time():
         return "locked"
+
     if u["password"] != hash_pw(password):
         u["failed_attempts"] = u.get("failed_attempts", 0) + 1
+
         if u["failed_attempts"] >= MAX_ATTEMPTS:
             u["locked_until"] = time.time() + LOCK_TIME
             save_users(users)
             log_audit(username, "ACCOUNT_LOCKED")
             return "locked"
+
         save_users(users)
         log_audit(username, "LOGIN_FAILED", f"Attempt {u['failed_attempts']}")
         return "wrong_password"
+
     u["failed_attempts"] = 0
-    u["locked_until"]    = 0
-    u["last_login"]      = datetime.now().isoformat()
+    u["locked_until"] = 0
+    u["last_login"] = datetime.now().isoformat()
+
     save_users(users)
     log_audit(username, "LOGIN_SUCCESS", "Successful login")
+
     return "success"
+
 
 def register_user(username: str, password: str, role: str, email: str = "") -> str:
     users = load_users()
+
     if username in users:
         return "exists"
+
     if not is_strong(password):
         return "weak"
+
     users[username] = {
-        "password":        hash_pw(password),
-        "role":            role,
-        "email":           email,
+        "password": hash_pw(password),
+        "role": role,
+        "email": email,
         "failed_attempts": 0,
-        "locked_until":    0,
-        "created_at":      datetime.now().isoformat(),
-        "two_fa_enabled":  False,
+        "locked_until": 0,
+        "created_at": datetime.now().isoformat(),
+        "two_fa_enabled": False,
     }
+
     save_users(users)
     log_audit(username, "USER_REGISTERED", f"New {role}")
+
     return "success"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# SESSION STATE
+# SESSION STATE (GLOBAL SAFE INIT)
 # ──────────────────────────────────────────────────────────────────────────────
 for k, v in [
-    ("authenticated", False), ("username", None), ("role", None),
-    ("awaiting_2fa", False), ("syslog_collector", None),
-    ("live_refresh", False), ("last_refresh", 0.0),
-    ("last_alerts", []),     ("last_stats", {}),
+    ("authenticated", False),
+    ("username", None),
+    ("role", None),
+    ("awaiting_2fa", False),
+    ("syslog_collector", None),
+    ("live_refresh", False),
+    ("last_refresh", 0.0),
+    ("last_alerts", []),
+    ("last_stats", {}),
 ]:
     if k not in st.session_state:
         st.session_state[k] = v
 
+
 # ──────────────────────────────────────────────────────────────────────────────
-# SIDEBAR THEME (always visible)
+# SIDEBAR CONTROLS
 # ──────────────────────────────────────────────────────────────────────────────
 st.sidebar.title("⚙️ Controls")
-theme = st.sidebar.selectbox("Theme", ["Dark Pro", "Cyber Blue", "Matrix", "Light Pro"])
+
+theme = st.sidebar.selectbox(
+    "Theme",
+    ["Dark Pro", "Cyber Blue", "Matrix", "Light Pro"],
+    key="theme_select"
+)
+
 apply_theme(theme)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MODE SELECTION (MUST COME FIRST BEFORE mode_key)
+# ──────────────────────────────────────────────────────────────────────────────
+st.sidebar.header("Analysis Mode")
+
+mode = st.sidebar.radio(
+    "Select Mode",
+    ["Test", "Live (SSH)", "Syslog Listener"],
+    key="analysis_mode_radio"
+)
+
+# ✔ NOW THIS IS SAFE
+mode_key = mode.replace(" ", "_").replace("(", "").replace(")", "")
+ALERT_HISTORY_DB = f"alert_history_{mode_key}.json"
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MODE-SAFE SESSION STATE INITIALIZATION
+# ──────────────────────────────────────────────────────────────────────────────
+if f"{mode_key}_alerts" not in st.session_state:
+    st.session_state[f"{mode_key}_alerts"] = []
+
+if f"{mode_key}_stats" not in st.session_state:
+    st.session_state[f"{mode_key}_stats"] = {}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FIX: PROPER MODE SWITCH HANDLING (NO EXTRA MODE UI / NO LEAKAGE)
+# ──────────────────────────────────────────────────────────────────────────────
+if "active_mode_key" not in st.session_state:
+    st.session_state.active_mode_key = mode_key
+
+elif st.session_state.active_mode_key != mode_key:
+
+    # Clear old UI state
+    st.session_state.last_alerts = []
+    st.session_state.last_stats = {}
+    st.session_state.alerts_data = []
+
+    for k in ["results", "parsed_logs", "detections"]:
+        st.session_state.pop(k, None)
+
+    st.session_state.active_mode_key = mode_key
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RESET DASHBOARD
+# ──────────────────────────────────────────────────────────────────────────────
+if st.sidebar.button("🧹 Reset Dashboard"):
+    st.session_state.last_alerts = []
+    st.session_state.last_stats = {}
+    st.session_state.alerts_data = []
+    st.session_state.parsed_logs = []
+    st.session_state.detections = []
+    st.session_state.results = {}
+
+    st.success("Dashboard reset successfully.")
+    st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LOGIN / REGISTER PAGE
@@ -346,47 +451,73 @@ if st.session_state.live_refresh:
 
 # ── Sidebar: analysis options ──────────────────────────────────────────────────
 st.sidebar.header("Analysis Mode")
+
 mode = st.sidebar.radio(
     "Mode",
-    ["Test", "Remote Live", "Syslog Listener", "Windows Event Log"]
+    ["Test", "Live (SSH)", "Syslog Listener"],
+    key="analysis_mode_selector"
 )
+mode_key = mode.replace(" ", "_").replace("(", "").replace(")", "")
+ALERT_HISTORY_DB = f"alert_history_{mode_key}.json"
 
+if "last_mode" not in st.session_state:
+    st.session_state.last_mode = mode
+
+if st.session_state.last_mode != mode:
+
+    mode_key = mode.replace(" ", "_").replace("(", "").replace(")", "")
+
+    # Load saved results for selected mode
+    st.session_state.last_alerts = st.session_state.get(f"{mode_key}_alerts", [])
+    st.session_state.last_stats  = st.session_state.get(f"{mode_key}_stats", {})
+    st.session_state.alerts_data = st.session_state.last_alerts
+
+    # Optional: clear temporary processing data
+    for k in ["results", "alerts", "parsed_logs", "detections"]:
+        if k in st.session_state:
+            del st.session_state[k]
+
+    st.session_state.last_mode = mode
+    st.rerun()
+
+# ── Per-mode defaults (never bleed across modes) ──────────────────────────
 log_file_path  = None
 remote_server  = None
 remote_user    = None
 remote_pass    = None
-remote_logpath = "/var/log/auth.log"   # safe default — avoids NameError in all branches
+remote_logpath = "/var/log/auth.log"
+sl_port        = 10514
+sl_proto       = "UDP"
 
+# ── Mode-specific sidebar inputs ────────────────────────────────────────────
 if mode == "Test":
     log_file_path = st.sidebar.text_input(
-        "Log file path (leave blank to use synthetic test logs)",
-        value="logs/logs.txt"
+        "Log file path",
+        value="logs/logs.txt",
+        key="test_log_file",
+        help="Leave blank or point to a real log file. Synthetic logs are used if the file is missing."
     )
-    st.sidebar.caption("📁 Leave the path blank or point to a real log file. "
-                       "Synthetic attack logs are injected when the file is absent.")
+    st.sidebar.caption("📁 Synthetic attack logs are injected when the file is absent.")
 
-elif mode == "Remote Live":
-    remote_server  = st.sidebar.text_input("Remote Server IP/hostname")
-    remote_user    = st.sidebar.text_input("Username")
-    remote_pass    = st.sidebar.text_input("Password", type="password")
-    remote_logpath = st.sidebar.text_input(
-        "Remote Log Path / Event Log Name",
-        value="Security"
-    )
+elif mode == "Live (SSH)":
+    remote_server  = st.sidebar.text_input("Remote Server IP/hostname", key="ssh_server")
+    remote_user    = st.sidebar.text_input("SSH Username",               key="ssh_user")
+    remote_pass    = st.sidebar.text_input("SSH Password", type="password", key="ssh_pass")
+    remote_logpath = st.sidebar.text_input("Remote log path",
+                                           value="/var/log/auth.log", key="ssh_logpath")
     if remote_server and remote_user:
-        st.sidebar.success(
-            f"🔗 Auto Mode → {remote_user}@{remote_server} | Source: {remote_logpath}"
-        )
+        st.sidebar.success(f"🔗 Will SSH → {remote_user}@{remote_server}:{remote_logpath}")
     elif remote_server:
         st.sidebar.warning("⚠️ Enter SSH username.")
     else:
         st.sidebar.info("Enter remote server details above.")
     if st.session_state.role != "Admin":
-        st.sidebar.error("🔒 Admin role required for Remote Live mode.")
+        st.sidebar.error("🔒 Admin role required for Live SSH mode.")
 
 elif mode == "Syslog Listener":
-    sl_port  = st.sidebar.number_input("Listen Port", value=514, min_value=1, max_value=65535)
-    sl_proto = st.sidebar.selectbox("Protocol", ["UDP", "TCP"])
+    sl_port  = st.sidebar.number_input("Listen Port", value=514,
+                                       min_value=1, max_value=65535, key="sl_port")
+    sl_proto = st.sidebar.selectbox("Protocol", ["UDP", "TCP"], key="sl_proto")
     sc = st.session_state.get("syslog_collector")
     if sc and sc._running:
         buffered = len(sc._buffer)
@@ -396,20 +527,6 @@ elif mode == "Syslog Listener":
     else:
         st.sidebar.warning("⚠️ Listener not started. Go to **Settings → System** to start it.")
     st.sidebar.caption("Start the listener first, then click Run Analysis to drain buffered messages.")
-
-elif mode == "Windows Event Log":
-    if st.session_state.role == "Admin":
-        remote_server = st.sidebar.text_input("Remote Server IP (blank = local Windows)")
-        remote_user   = st.sidebar.text_input("Remote Username")
-        remote_pass   = st.sidebar.text_input("Remote Password", type="password")
-        if remote_server:
-            st.sidebar.success(f"🔗 Will collect from remote: {remote_server}")
-        else:
-            st.sidebar.info("🖥️ Local mode — collects from this machine's Security Event Log.")
-        if not _WINEVENT_OK:
-            st.sidebar.error("❌ core/windows_event_collector.py not found.")
-    else:
-        st.sidebar.error("🔒 Admin role required for Windows Event Log mode.")
 
 enrich_ips  = st.sidebar.checkbox("🌐 Enrich IPs via AbuseIPDB", value=_ENRICH_OK)
 send_emails = st.sidebar.checkbox("📧 Send email alerts", value=_NOTIF_OK)
@@ -433,19 +550,40 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 # RUN ANALYSIS PIPELINE
 # ══════════════════════════════════════════════════════════════════════════════
 if run_button:
+    # ==============================
+    # FORCE NEW RUN CONTEXT (FIX 3)
+    # ==============================
+    run_id = time.time()
+
+    # ✅ ADD THIS HERE
+    mode_key = mode.replace(" ", "_").replace("(", "").replace(")", "")
+
+    st.session_state[f"{mode_key}_alerts"] = []
+    st.session_state[f"{mode_key}_stats"] = {}
+
+    # Clear previous session results so UI does not reuse old data
+    st.session_state.last_alerts = []
+    st.session_state.last_stats = {}
+    st.session_state.alerts_data = []
+    st.session_state.results = {}
+    st.session_state.parsed_logs = []
+    st.session_state.detections = []
+
+    # Track new run
+    st.session_state["run_id"] = run_id
     if not _SIEM_OK:
         st.error("❌ SIEMFramework not available — check that main.py is in the project root.")
 
-    elif mode == "Remote Live" and st.session_state.role != "Admin":
+    elif mode == "Live (SSH)" and st.session_state.role != "Admin":
         st.error("🔒 Only Admins can run Live SSH mode.")
 
     elif mode == "Windows Event Log" and st.session_state.role != "Admin":
         st.error("🔒 Only Admins can run Windows Event Log mode.")
 
-    elif mode == "Remote Live" and not remote_server:
+    elif mode == "Live (SSH)" and not remote_server:
         st.error("⚠️ Enter a remote server IP/hostname before running.")
 
-    elif mode == "Remote Live" and not remote_user:
+    elif mode == "Live (SSH)" and not remote_user:
         st.error("⚠️ Enter SSH username before running.")
 
     elif mode == "Syslog Listener" and not _SYSLOG_OK:
@@ -462,17 +600,35 @@ if run_button:
             try:
                 # ── MODE: Windows Event Log ────────────────────────────────
                 if mode == "Windows Event Log":
-                    wc  = WindowsEventCollector()
-                    raw = (wc.collect_remote(remote_server, remote_user, remote_pass)
-                           if remote_server else wc.collect())
+                    wc      = WindowsEventCollector()
+                    channel = remote_logpath.strip() if remote_logpath else "Security"
+                    raw = (
+                        wc.collect_remote(remote_server, remote_user, remote_pass,
+                                          channel=channel)
+                        if remote_server
+                        else wc.collect(channel=channel)
+                    )
                     if not raw:
-                        st.warning("⚠️ No Windows events collected. "
-                                   "Ensure pywin32 is installed (local) or SSH access is correct (remote).")
+                        st.warning(
+                            f"⚠️ No events collected from the **{channel}** log "
+                            + (f"on {remote_server}. Check: WinRM is enabled (`winrm quickconfig`), "
+                               "credentials are correct, and the user has admin rights."
+                               if remote_server else
+                               ". Ensure pywin32 is installed (`pip install pywin32`) "
+                               "and you are running on Windows with admin rights.")
+                        )
                         st.stop()
                     siem = SIEMFramework(test_mode=False)
                     siem.raw_logs    = raw
                     siem.parsed_logs = []
                     siem.run_analysis()
+                    # Fresh results from backend
+                    st.session_state.last_alerts = siem.alerts
+                    st.session_state.last_stats = siem.statistics
+                    st.session_state.alerts_data = siem.alerts
+                    st.session_state.results = siem.get_summary()
+                    st.session_state.parsed_logs = siem.parsed_logs
+                    st.session_state.detections = siem.detections
 
                 # ── MODE: Syslog Listener ──────────────────────────────────
                 elif mode == "Syslog Listener":
@@ -486,22 +642,39 @@ if run_button:
                     siem.raw_logs    = raw
                     siem.parsed_logs = []
                     siem.run_analysis()
+                    # Fresh results from backend
+                    st.session_state.last_alerts = siem.alerts
+                    st.session_state.last_stats = siem.statistics
+                    st.session_state.alerts_data = siem.alerts
+                    st.session_state.results = siem.get_summary()
+                    st.session_state.parsed_logs = siem.parsed_logs
+                    st.session_state.detections = siem.detections
 
                 # ── MODE: Live SSH ─────────────────────────────────────────
-                elif mode == "Remote Live":
+                elif mode == "Live (SSH)":
                     siem = SIEMFramework(
-                        log_file_path=remote_logpath,
+                        log_file_path=remote_logpath,   # used as remote_log_path in collector
                         live_mode=True,
                         test_mode=False,
                         remote_server=remote_server,
                         remote_user=remote_user,
                         remote_password=remote_pass,
                     )
+                    # Pass remote_log_path explicitly to the collector
+                    siem.collector.remote_log_path = remote_logpath
                     siem.run_analysis()
+                    # Fresh results from backend
+                    st.session_state.last_alerts = siem.alerts
+                    st.session_state.last_stats = siem.statistics
+                    st.session_state.alerts_data = siem.alerts
+                    st.session_state.results = siem.get_summary()
+                    st.session_state.parsed_logs = siem.parsed_logs
+                    st.session_state.detections = siem.detections
                     if not siem.raw_logs:
                         st.warning(
                             f"⚠️ No logs collected from {remote_user}@{remote_server}:{remote_logpath}. "
-                            "Check: credentials, WinRM/SSH connectivity, server reachability, log source."
+                            "Check: SSH credentials are correct, port 22 is open, "
+                            "the log file path exists, and the user has sudo rights to read it."
                         )
                         st.stop()
 
@@ -514,6 +687,13 @@ if run_button:
                         test_mode=(not use_file),
                     )
                     siem.run_analysis()
+                    # Fresh results from backend
+                    st.session_state.last_alerts = siem.alerts
+                    st.session_state.last_stats = siem.statistics
+                    st.session_state.alerts_data = siem.alerts
+                    st.session_state.results = siem.get_summary()
+                    st.session_state.parsed_logs = siem.parsed_logs
+                    st.session_state.detections = siem.detections
                     if not use_file:
                         st.info("📁 Log file not found — running with synthetic test logs.")
 
@@ -544,16 +724,25 @@ if run_button:
                 # ── Audit ──────────────────────────────────────────────────
                 mode_labels = {
                     "Test":               "🧪 Test",
-                    "Remote Live":        "🔴 Remote Live",
+                    "Live (SSH)":         "🔴 Live SSH",
                     "Syslog Listener":    "📡 Syslog",
                     "Windows Event Log":  "🪟 WinEvent",
                 }
                 log_audit(st.session_state.username, "ANALYSIS_RUN",
                           f"Mode: {mode_labels.get(mode, mode)}, Alerts: {len(alerts)}")
 
+                # Save separately for each mode
+                mode_key = mode.replace(" ", "_").replace("(", "").replace(")", "")
+
+                st.session_state[f"{mode_key}_alerts"] = alerts
+                st.session_state[f"{mode_key}_stats"]  = stats
+
+                # Current displayed mode
                 st.session_state.last_alerts = alerts
-                st.session_state.alerts_data = alerts    # ✅ FIX: Store alerts, don't overwrite
+                st.session_state.alerts_data = alerts
                 st.session_state.last_stats  = stats
+                st.session_state.current_mode = mode
+                st.session_state.analysis_mode = mode
 
                 # ── Result summary ─────────────────────────────────────────
                 st.success(
@@ -576,7 +765,7 @@ if run_button:
 # TAB 1  —  DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    history = load_json(ALERT_HISTORY_DB, [])
+    history = st.session_state.get("last_alerts", [])
     alerts  = st.session_state.last_alerts
 
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -623,7 +812,7 @@ with tab1:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab2:
     st.header("🚨 Alert Management")
-    history = load_json(ALERT_HISTORY_DB, [])
+    history = st.session_state.get("last_alerts", [])
 
     if not isinstance(history, list):
         history = []
@@ -727,7 +916,7 @@ with tab2:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab3:
     st.header("📊 Security Analytics")
-    history = load_json(ALERT_HISTORY_DB, [])
+    history = st.session_state.get("last_alerts", [])
     last_stats = st.session_state.get("last_stats", {})
     alerts_session = st.session_state.get("last_alerts", [])
 
@@ -1166,7 +1355,7 @@ with tab6:
 # ══════════════════════════════════════════════════════════════════════════════
 with tab7:
     st.header("📡 Live Monitor")
-    history = load_json(ALERT_HISTORY_DB, [])
+    history = st.session_state.get("last_alerts", [])
 
     if isinstance(history, list) and history:
         recent = sorted(history, key=lambda a: a.get("timestamp",""), reverse=True)[:15]
